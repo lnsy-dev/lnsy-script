@@ -1,0 +1,19 @@
+# Rust build output
+/target/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# macOS
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Claude metadata
+.claude/
