@@ -1,0 +1,429 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>lnsy-script</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@300;400&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    :root {
+      --bg:      #282828;
+      --fg:      #f5f0e8;
+      --gold:    #d4a843;
+      --dim:     #a89880;
+      --border:  #3a3530;
+      --code-bg: #1e1e1e;
+    }
+
+    html {
+      background: var(--bg);
+      color: var(--fg);
+      font-family: 'Fira Code', monospace;
+      font-weight: 300;
+      font-size: 14px;
+      line-height: 1.7;
+    }
+
+    body {
+      max-width: 760px;
+      margin: 0 auto;
+      padding: 80px 32px 120px;
+    }
+
+    /* ── header ── */
+    header {
+      margin-bottom: 72px;
+    }
+
+    .wordmark {
+      font-size: 28px;
+      font-weight: 300;
+      color: var(--gold);
+      letter-spacing: -0.5px;
+    }
+
+    .tagline {
+      margin-top: 10px;
+      color: var(--dim);
+      font-size: 13px;
+    }
+
+    .install {
+      margin-top: 28px;
+      display: inline-block;
+      background: var(--code-bg);
+      color: var(--fg);
+      padding: 10px 20px;
+      border-left: 2px solid var(--gold);
+      font-size: 13px;
+    }
+
+    /* ── sections ── */
+    section {
+      margin-bottom: 64px;
+    }
+
+    h2 {
+      font-size: 11px;
+      font-weight: 400;
+      text-transform: uppercase;
+      letter-spacing: 2px;
+      color: var(--gold);
+      margin-bottom: 24px;
+    }
+
+    h3 {
+      font-size: 13px;
+      font-weight: 400;
+      color: var(--fg);
+      margin-top: 32px;
+      margin-bottom: 12px;
+    }
+
+    p {
+      color: var(--dim);
+      font-size: 13px;
+      margin-bottom: 16px;
+    }
+
+    /* ── code blocks ── */
+    pre {
+      background: var(--code-bg);
+      border-left: 2px solid var(--border);
+      padding: 16px 20px;
+      overflow-x: auto;
+      margin-bottom: 20px;
+      font-size: 12.5px;
+      line-height: 1.6;
+    }
+
+    code {
+      font-family: 'Fira Code', monospace;
+      font-weight: 300;
+    }
+
+    .kw  { color: #c792ea; }
+    .fn  { color: #82aaff; }
+    .str { color: #c3e88d; }
+    .cmt { color: #546e7a; }
+    .cls { color: var(--gold); }
+    .num { color: #f78c6c; }
+
+    /* ── feature grid ── */
+    .grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      border: 1px solid var(--border);
+      margin-bottom: 32px;
+    }
+
+    .cell {
+      background: var(--bg);
+      padding: 20px;
+    }
+
+    .cell-label {
+      font-size: 11px;
+      color: var(--gold);
+      text-transform: uppercase;
+      letter-spacing: 1.5px;
+      margin-bottom: 6px;
+    }
+
+    .cell-desc {
+      font-size: 12px;
+      color: var(--dim);
+    }
+
+    /* ── table ── */
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12.5px;
+      margin-bottom: 20px;
+    }
+
+    th {
+      text-align: left;
+      font-weight: 400;
+      color: var(--gold);
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      padding: 8px 12px 8px 0;
+      border-bottom: 1px solid var(--border);
+    }
+
+    td {
+      padding: 8px 12px 8px 0;
+      color: var(--dim);
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+    }
+
+    td:first-child {
+      color: var(--fg);
+      white-space: nowrap;
+    }
+
+    /* ── divider ── */
+    hr {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 64px 0;
+    }
+
+    /* ── footer ── */
+    footer {
+      font-size: 11px;
+      color: var(--border);
+      margin-top: 96px;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <div class="wordmark">lnsy-script</div>
+    <p class="tagline">A JavaScript runtime with embedded ML — built in Rust.</p>
+    <div class="install"><code>cargo build --release &amp;&amp; ./target/release/lnsy-script</code></div>
+  </header>
+
+  <!-- ── Overview ── -->
+  <section>
+    <h2>Overview</h2>
+    <p>lnsy-script is a QuickJS-powered JavaScript runtime that ships transformer models, vector search, graph databases, and multi-threaded workers as first-class globals. All models are compiled into the binary — no external dependencies for inference.</p>
+
+    <div class="grid">
+      <div class="cell">
+        <div class="cell-label">Runtime</div>
+        <div class="cell-desc">QuickJS engine via rquickjs. REPL + script mode. Full Promise support.</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">BERT / NLP</div>
+        <div class="cell-desc">Embeddings, sentiment, extractive QA, named entity recognition.</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">KNN</div>
+        <div class="cell-desc">Text classification over MiniLM embeddings. Persistent JSON storage.</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">Fetch</div>
+        <div class="cell-desc">Standards-compatible HTTP client backed by Rust reqwest.</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">Agents</div>
+        <div class="cell-desc">JS workers in isolated OS threads. Message-passing concurrency.</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label">Databases</div>
+        <div class="cell-desc">SQLite, vector store, and property graph — all persistent.</div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── Runtime ── -->
+  <section>
+    <h2>JavaScript Runtime</h2>
+    <p>Standard globals available in every context:</p>
+
+    <table>
+      <tr><th>Global</th><th>Description</th></tr>
+      <tr><td><code>console</code></td><td>log, warn, error</td></tr>
+      <tr><td><code>fetch</code></td><td>HTTP client, Promise-based</td></tr>
+      <tr><td><code>fs</code></td><td>readFile, writeFile, appendFile, deleteFile, exists, readDotEnv</td></tr>
+      <tr><td><code>Promise</code></td><td>Full Promise/A+ implementation</td></tr>
+    </table>
+
+    <pre><code><span class="cmt">// file system</span>
+fs.writeFile(<span class="str">"/tmp/out.txt"</span>, <span class="str">"hello"</span>);
+<span class="kw">var</span> text = fs.readFile(<span class="str">"/tmp/out.txt"</span>);
+<span class="kw">var</span> env  = fs.readDotEnv(<span class="str">".env"</span>);
+
+<span class="cmt">// console</span>
+console.log(<span class="str">"value:"</span>, text);
+console.warn(<span class="str">"something off"</span>);
+console.error(<span class="str">"fatal"</span>);</code></pre>
+  </section>
+
+  <!-- ── KNN ── -->
+  <section>
+    <h2>KNN</h2>
+    <p>Text classification using k-nearest neighbors over MiniLM sentence embeddings (384-dimensional). Supports persistence to JSON.</p>
+
+    <table>
+      <tr><th>Method</th><th>Description</th></tr>
+      <tr><td><code>train(data)</code></td><td>Train on <code>[{text, label}]</code></td></tr>
+      <tr><td><code>trainText(texts, labels)</code></td><td>Train on separate arrays</td></tr>
+      <tr><td><code>query(text, k?)</code></td><td>Return k nearest <code>[{label, score}]</code></td></tr>
+      <tr><td><code>classify(text, k?)</code></td><td>Return majority-vote label</td></tr>
+    </table>
+
+    <pre><code><span class="kw">var</span> knn = <span class="kw">new</span> <span class="cls">KNN</span>(<span class="str">"model.json"</span>);
+
+knn.<span class="fn">train</span>([
+  { text: <span class="str">"I love this"</span>,    label: <span class="str">"positive"</span> },
+  { text: <span class="str">"Absolutely awful"</span>, label: <span class="str">"negative"</span> }
+]).<span class="fn">then</span>(<span class="kw">function</span>() {
+  <span class="kw">return</span> knn.<span class="fn">classify</span>(<span class="str">"This is wonderful"</span>);
+}).<span class="fn">then</span>(<span class="kw">function</span>(label) {
+  console.<span class="fn">log</span>(label);  <span class="cmt">// "positive"</span>
+});</code></pre>
+  </section>
+
+  <!-- ── BERT ── -->
+  <section>
+    <h2>BERT</h2>
+    <p>Transformer inference via <code>EmbeddingServer</code>. All ONNX models are bundled in the binary.</p>
+
+    <table>
+      <tr><th>Method</th><th>Returns</th></tr>
+      <tr><td><code>generateEmbedding(text)</code></td><td>Float32Array (384-dim)</td></tr>
+      <tr><td><code>askQuestion(context, question)</code></td><td>String — extracted answer span</td></tr>
+      <tr><td><code>getSentiment(text)</code></td><td><code>{label, score}</code></td></tr>
+      <tr><td><code>getNamedEntities(text)</code></td><td><code>[{entity, word}]</code></td></tr>
+    </table>
+
+    <h3>Sentiment</h3>
+    <pre><code><span class="kw">var</span> es = <span class="kw">new</span> <span class="cls">EmbeddingServer</span>();
+
+es.<span class="fn">getSentiment</span>(<span class="str">"I absolutely love this!"</span>).<span class="fn">then</span>(<span class="kw">function</span>(r) {
+  console.<span class="fn">log</span>(r.label);  <span class="cmt">// "POSITIVE"</span>
+  console.<span class="fn">log</span>(r.score);  <span class="cmt">// 0.98</span>
+});</code></pre>
+
+    <h3>Question Answering</h3>
+    <pre><code>es.<span class="fn">askQuestion</span>(
+  <span class="str">"The Eiffel Tower is located in Paris, France."</span>,
+  <span class="str">"Where is the Eiffel Tower?"</span>
+).<span class="fn">then</span>(<span class="kw">function</span>(answer) {
+  console.<span class="fn">log</span>(answer);  <span class="cmt">// "Paris"</span>
+});</code></pre>
+
+    <h3>Named Entity Recognition</h3>
+    <pre><code>es.<span class="fn">getNamedEntities</span>(<span class="str">"Apple Inc. is in Cupertino."</span>).<span class="fn">then</span>(<span class="kw">function</span>(ents) {
+  ents.<span class="fn">forEach</span>(<span class="kw">function</span>(e) {
+    console.<span class="fn">log</span>(e.entity + <span class="str">": "</span> + e.word);
+    <span class="cmt">// ORG: Apple Inc.</span>
+    <span class="cmt">// LOC: Cupertino</span>
+  });
+});</code></pre>
+  </section>
+
+  <!-- ── Fetch ── -->
+  <section>
+    <h2>Fetch</h2>
+    <p>Standards-compatible <code>fetch</code> backed by Rust's <code>reqwest</code>. Supports GET, POST, PUT, DELETE, and PATCH.</p>
+
+    <table>
+      <tr><th>Property / Method</th><th>Description</th></tr>
+      <tr><td><code>response.status</code></td><td>HTTP status code</td></tr>
+      <tr><td><code>response.ok</code></td><td>true if 200–299</td></tr>
+      <tr><td><code>response.text()</code></td><td>Promise&lt;String&gt;</td></tr>
+      <tr><td><code>response.json()</code></td><td>Promise&lt;Object&gt;</td></tr>
+    </table>
+
+    <pre><code><span class="cmt">// GET</span>
+<span class="fn">fetch</span>(<span class="str">"https://api.example.com/items"</span>)
+  .<span class="fn">then</span>(<span class="kw">function</span>(r) { <span class="kw">return</span> r.<span class="fn">json</span>(); })
+  .<span class="fn">then</span>(<span class="kw">function</span>(data) { console.<span class="fn">log</span>(data); });
+
+<span class="cmt">// POST</span>
+<span class="fn">fetch</span>(<span class="str">"https://api.example.com/items"</span>, {
+  method: <span class="str">"POST"</span>,
+  headers: { <span class="str">"Content-Type"</span>: <span class="str">"application/json"</span> },
+  body: JSON.<span class="fn">stringify</span>({ name: <span class="str">"lnsy-script"</span> })
+}).<span class="fn">then</span>(<span class="kw">function</span>(r) {
+  console.<span class="fn">log</span>(r.status);  <span class="cmt">// 201</span>
+});</code></pre>
+  </section>
+
+  <!-- ── Agents ── -->
+  <section>
+    <h2>Agents</h2>
+    <p>Multi-threaded JavaScript workers. Each agent runs in its own OS thread with a full runtime — including access to <code>KNN</code>, <code>EmbeddingServer</code>, <code>fetch</code>, and databases.</p>
+
+    <pre><code><span class="cmt">// main.js</span>
+<span class="kw">var</span> agent = <span class="kw">new</span> <span class="cls">Agent</span>(<span class="str">"worker.js"</span>);
+
+agent.onmessage = <span class="kw">function</span>(event) {
+  console.<span class="fn">log</span>(event.data);  <span class="cmt">// result from worker</span>
+};
+
+agent.<span class="fn">postMessage</span>({ task: <span class="str">"classify"</span>, text: <span class="str">"great product"</span> });
+
+<span class="kw">for</span> (<span class="kw">var</span> i = <span class="num">0</span>; i < <span class="num">500</span>; i++) { <span class="fn">__agentPoll</span>(); }</code></pre>
+
+    <pre><code><span class="cmt">// worker.js</span>
+<span class="kw">var</span> knn = <span class="kw">new</span> <span class="cls">KNN</span>(<span class="str">"model.json"</span>);
+
+self.onmessage = <span class="kw">function</span>(event) {
+  knn.<span class="fn">classify</span>(event.data.text).<span class="fn">then</span>(<span class="kw">function</span>(label) {
+    self.<span class="fn">postMessage</span>(label);
+  });
+};</code></pre>
+
+    <p>Call <code>__agentPoll()</code> in the main thread to flush the message queue from all active workers.</p>
+  </section>
+
+  <!-- ── Databases ── -->
+  <section>
+    <h2>Databases</h2>
+
+    <h3>SQLite — <code>Database</code></h3>
+    <p>Document store with full-text search (FTS5). Stores arbitrary JSON objects.</p>
+    <pre><code><span class="kw">var</span> db = <span class="kw">new</span> <span class="cls">Database</span>(<span class="str">"store.db"</span>);
+
+db.<span class="fn">addItem</span>({ name: <span class="str">"alice"</span>, city: <span class="str">"portland"</span> }).<span class="fn">then</span>(<span class="kw">function</span>() {
+  <span class="kw">return</span> db.<span class="fn">find</span>(<span class="str">"city"</span>, <span class="str">"portland"</span>);
+}).<span class="fn">then</span>(<span class="kw">function</span>(rows) {
+  console.<span class="fn">log</span>(rows[<span class="num">0</span>].name);  <span class="cmt">// "alice"</span>
+});</code></pre>
+
+    <h3>Vector Store — <code>VectorDatabase</code></h3>
+    <p>Store embeddings with metadata. Query by cosine, euclidean, or manhattan distance.</p>
+    <pre><code><span class="kw">var</span> vdb = <span class="kw">new</span> <span class="cls">VectorDatabase</span>(<span class="str">"vecs.db"</span>);
+<span class="kw">var</span> es  = <span class="kw">new</span> <span class="cls">EmbeddingServer</span>();
+
+es.<span class="fn">generateEmbedding</span>(<span class="str">"cat"</span>).<span class="fn">then</span>(<span class="kw">function</span>(vec) {
+  <span class="kw">return</span> vdb.<span class="fn">addItem</span>(vec, { label: <span class="str">"cat"</span> });
+}).<span class="fn">then</span>(<span class="kw">function</span>() {
+  <span class="kw">return</span> es.<span class="fn">generateEmbedding</span>(<span class="str">"kitten"</span>);
+}).<span class="fn">then</span>(<span class="kw">function</span>(q) {
+  <span class="kw">return</span> vdb.<span class="fn">query</span>(q, <span class="num">5</span>, <span class="str">"cosine"</span>);
+}).<span class="fn">then</span>(<span class="kw">function</span>(results) {
+  console.<span class="fn">log</span>(results[<span class="num">0</span>].metadata.label);  <span class="cmt">// "cat"</span>
+  console.<span class="fn">log</span>(results[<span class="num">0</span>].score);           <span class="cmt">// ~0.95</span>
+});</code></pre>
+
+    <h3>Graph — <code>GraphDatabase</code></h3>
+    <p>Property graph with typed nodes and directed, labeled edges.</p>
+    <pre><code><span class="kw">var</span> g = <span class="kw">new</span> <span class="cls">GraphDatabase</span>(<span class="str">"graph.db"</span>);
+
+g.<span class="fn">addNode</span>({ name: <span class="str">"Alice"</span> }).<span class="fn">then</span>(<span class="kw">function</span>(a) {
+  <span class="kw">return</span> g.<span class="fn">addNode</span>({ name: <span class="str">"Bob"</span> }).<span class="fn">then</span>(<span class="kw">function</span>(b) {
+    <span class="kw">return</span> g.<span class="fn">addEdge</span>({ source: a, target: b, name: <span class="str">"knows"</span> });
+  });
+}).<span class="fn">then</span>(<span class="kw">function</span>() {
+  <span class="kw">return</span> g.<span class="fn">findNode</span>({ name: <span class="str">"Alice"</span> });
+}).<span class="fn">then</span>(<span class="kw">function</span>(alice) {
+  <span class="kw">return</span> g.<span class="fn">getConnectedNodes</span>(alice.id);
+}).<span class="fn">then</span>(<span class="kw">function</span>(neighbors) {
+  console.<span class="fn">log</span>(neighbors[<span class="num">0</span>].name);  <span class="cmt">// "Bob"</span>
+});</code></pre>
+  </section>
+
+  <footer>lnsy-script &mdash; MIT</footer>
+
+</body>
+</html>
