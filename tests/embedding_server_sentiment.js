@@ -1,0 +1,1 @@
+var e = new EmbeddingServer(); e.getSentiment("I absolutely love this, it is wonderful!").then(function(s) { console.log(s.label); console.log(typeof s.score); console.log(s.score > 0 && s.score <= 1); return e.getSentiment("This is terrible and I hate every part of it."); }).then(function(s2) { console.log(s2.label); }).catch(function(err) { console.log("error: " + err); });

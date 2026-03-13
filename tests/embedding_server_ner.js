@@ -1,0 +1,1 @@
+new EmbeddingServer().getNamedEntities("Apple is headquartered in Cupertino.").then(function(entities) { console.log(Array.isArray(entities)); console.log(entities.length > 0); entities.forEach(function(e) { console.log(e.entity + ": " + e.word); }); }).catch(function(err) { console.log("error: " + err); });

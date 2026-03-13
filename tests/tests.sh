@@ -152,6 +152,86 @@ check "fs.deleteFile removes file" \
 
 check_static_server "StaticServer serves files over HTTPS"
 
+check "EmbeddingServer is defined as a class" \
+    "$SCRIPT_DIR/embedding_server_class.js" \
+    "function"
+
+check "EmbeddingServer.generateEmbedding returns a float vector of length 384" \
+    "$SCRIPT_DIR/embedding_server_embedding.js" \
+    "$(printf 'true\n384\nnumber\ntrue\ntrue')"
+
+check "EmbeddingServer.askQuestion extracts answer span from context" \
+    "$SCRIPT_DIR/embedding_server_qa.js" \
+    "$(printf 'Paris\nstring\ntrue')"
+
+check "EmbeddingServer.getSentiment classifies positive and negative sentiment" \
+    "$SCRIPT_DIR/embedding_server_sentiment.js" \
+    "$(printf 'POSITIVE\nnumber\ntrue\nNEGATIVE')"
+
+check "EmbeddingServer.getNamedEntities extracts ORG and LOC entities" \
+    "$SCRIPT_DIR/embedding_server_ner.js" \
+    "$(printf 'true\ntrue\nORG: Apple\nLOC: Cupertino')"
+
+check "Database is defined as a class" \
+    "$SCRIPT_DIR/database_class.js" \
+    "function"
+
+check "Database addItem, find, search (in-memory)" \
+    "$SCRIPT_DIR/database_ops.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue')"
+
+check "VectorDatabase is defined as a class" \
+    "$SCRIPT_DIR/vector_database_class.js" \
+    "true"
+
+check "VectorDatabase addItem and query (cosine, euclidean, manhattan)" \
+    "$SCRIPT_DIR/vector_database_ops.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue')"
+
+check "GraphDatabase is defined as a class" \
+    "$SCRIPT_DIR/graph_database_class.js" \
+    "function"
+
+check "GraphDatabase addNode, addEdge, getNode, findNode, getConnectedNodes (in-memory)" \
+    "$SCRIPT_DIR/graph_database_ops.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue')"
+
+check "KNN is defined as a class" \
+    "$SCRIPT_DIR/knn_class.js" \
+    "true"
+
+check "KNN.train accepts [{text, label}] and query returns [{label, score}]" \
+    "$SCRIPT_DIR/knn_train.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue')"
+
+check "KNN.trainText accepts separate text and label arrays" \
+    "$SCRIPT_DIR/knn_train_text.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue')"
+
+check "KNN.query returns k results sorted by descending score" \
+    "$SCRIPT_DIR/knn_query.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue')"
+
+check "KNN.classify returns the majority label among nearest neighbors" \
+    "$SCRIPT_DIR/knn_classify.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue')"
+
+check "KNN persists training data to file and reloads on construction" \
+    "$SCRIPT_DIR/knn_persist.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue')"
+
+check "Agent is defined as a class" \
+    "$SCRIPT_DIR/agent_class.js" \
+    "function"
+
+check "Agent round-trip message via echo worker" \
+    "$SCRIPT_DIR/agent_basic.js" \
+    "HELLO"
+
+check "Agent worker can use fetch" \
+    "$SCRIPT_DIR/agent_fetch.js" \
+    "200"
+
 # ---
 
 echo ""

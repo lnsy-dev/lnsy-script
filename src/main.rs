@@ -1,3 +1,16 @@
+mod database;
+use database::setup_database;
+mod embedding_server;
+use embedding_server::setup_embedding_server;
+mod vector_database;
+use vector_database::setup_vector_database;
+mod graph_database;
+use graph_database::setup_graph_database;
+mod knn;
+use knn::setup_knn;
+mod agent;
+use agent::setup_agent;
+
 use rquickjs::{class::Trace, Class, Context, Ctx, Function, JsLifetime, Object, Runtime, Value};
 use rquickjs::prelude::Rest;
 use std::io::{self, BufRead, Write};
@@ -355,15 +368,26 @@ fn needs_more_input(source: &str) -> bool {
     depth > 0
 }
 
+pub(crate) fn setup_context(ctx: Ctx<'_>) -> rquickjs::Result<()> {
+    setup_console(ctx.clone())?;
+    setup_fetch(ctx.clone())?;
+    setup_fs(ctx.clone())?;
+    setup_static_server(ctx.clone())?;
+    setup_embedding_server(ctx.clone())?;
+    setup_database(ctx.clone())?;
+    setup_vector_database(ctx.clone())?;
+    setup_graph_database(ctx.clone())?;
+    setup_knn(ctx.clone())?;
+    setup_agent(ctx)?;
+    Ok(())
+}
+
 fn main() {
     let runtime = Runtime::new().expect("failed to create QuickJS runtime");
     let context = Context::full(&runtime).expect("failed to create QuickJS context");
 
     context.with(|ctx| {
-        setup_console(ctx.clone()).expect("failed to set up console");
-        setup_fetch(ctx.clone()).expect("failed to set up fetch");
-        setup_fs(ctx.clone()).expect("failed to set up fs");
-        setup_static_server(ctx).expect("failed to set up StaticServer");
+        setup_context(ctx).expect("failed to set up context");
     });
 
     println!("lnsy-script 0.1.0 — type .exit or Ctrl+D to quit");
@@ -438,6 +462,18 @@ fn main() {
         });
 
         // Drain Promise microtask queue so .then() chains execute
+        loop {
+            match runtime.execute_pending_job() {
+                Ok(true) => {}
+                Ok(false) => break,
+                Err(_) => { eprintln!("Unhandled promise rejection"); break; }
+            }
+        }
+
+        // Poll agents for messages from worker threads
+        context.with(|ctx| agent::poll_agents(ctx.clone())).ok();
+
+        // Drain again in case onmessage handlers enqueued Promises
         loop {
             match runtime.execute_pending_job() {
                 Ok(true) => {}
