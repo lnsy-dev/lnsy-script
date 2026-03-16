@@ -461,6 +461,12 @@ Uses a self-signed TLS certificate. Runs in a background thread and does not blo
 
 ---
 
+## Building for LLMs
+
+See [AGENTS.md](./AGENTS.md) for a complete guide to writing lnsy-script applications with large language models.
+
+---
+
 ## License
 
 MIT

@@ -13,34 +13,11 @@ use agent::setup_agent;
 mod tools;
 use tools::setup_tools;
 
-use rquickjs::{class::Trace, Class, Context, Ctx, Function, JsLifetime, Object, Runtime, Value};
+use rquickjs::{class::Trace, Class, Context, Ctx, Function, JsLifetime, Module, Object, Runtime, Value};
+use rquickjs::loader::{FileResolver, ScriptLoader};
 use rquickjs::prelude::Rest;
 use std::io::{self, BufRead, Write};
 use std::sync::Arc;
-
-fn display_value(val: Value) -> String {
-    if val.is_undefined() {
-        return "undefined".to_string();
-    }
-    if val.is_null() {
-        return "null".to_string();
-    }
-    if let Some(b) = val.as_bool() {
-        return b.to_string();
-    }
-    if let Some(i) = val.as_int() {
-        return i.to_string();
-    }
-    if let Some(f) = val.as_float() {
-        return f.to_string();
-    }
-    if let Some(s) = val.as_string() {
-        if let Ok(s) = s.to_string() {
-            return format!("'{s}'");
-        }
-    }
-    "[object]".to_string()
-}
 
 fn console_format<'js>(ctx: Ctx<'js>, val: Value<'js>) -> String {
     if val.is_undefined() {
@@ -386,13 +363,69 @@ pub(crate) fn setup_context(ctx: Ctx<'_>) -> rquickjs::Result<()> {
     Ok(())
 }
 
+fn drain_jobs(runtime: &Runtime) {
+    loop {
+        match runtime.execute_pending_job() {
+            Ok(true) => {}
+            Ok(false) => break,
+            Err(_) => { eprintln!("Unhandled promise rejection"); break; }
+        }
+    }
+}
+
+fn print_js_error(ctx: &Ctx) {
+    let msg = ctx
+        .catch()
+        .as_exception()
+        .map(|exc| {
+            let msg = exc.message().unwrap_or_default();
+            let stack = exc.stack().unwrap_or_default();
+            if stack.is_empty() {
+                format!("Error: {msg}")
+            } else {
+                format!("Error: {msg}\n{stack}")
+            }
+        })
+        .unwrap_or_else(|| "unknown error".to_string());
+    eprintln!("{msg}");
+}
+
+fn run_file(runtime: &Runtime, context: &Context, path: &str) {
+    let source = match std::fs::read_to_string(path) {
+        Ok(s) => s,
+        Err(e) => { eprintln!("Error reading {path}: {e}"); return; }
+    };
+    context.with(|ctx| {
+        match Module::evaluate(ctx.clone(), path, source.as_str()) {
+            Ok(_) => {}
+            Err(_) => print_js_error(&ctx),
+        }
+    });
+    drain_jobs(runtime);
+    context.with(|ctx| agent::poll_agents(ctx.clone())).ok();
+    drain_jobs(runtime);
+}
+
 fn main() {
     let runtime = Runtime::new().expect("failed to create QuickJS runtime");
+
+    runtime.set_loader(
+        FileResolver::default().with_path("."),
+        ScriptLoader::default(),
+    );
+
     let context = Context::full(&runtime).expect("failed to create QuickJS context");
 
     context.with(|ctx| {
         setup_context(ctx).expect("failed to set up context");
     });
+
+    // Run a script file if provided as argument
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() > 1 {
+        run_file(&runtime, &context, &args[1]);
+        return;
+    }
 
     println!("lnsy-script 0.1.0 — type .exit or Ctrl+D to quit");
 
@@ -438,52 +471,24 @@ fn main() {
         let source = buffer.clone();
         buffer.clear();
 
+        // Wrap in async IIFE so top-level await works
+        let wrapped = format!(
+            "(async () => {{\n{}\n}})().catch(e => console.error(String(e)));",
+            source
+        );
+
         context.with(|ctx| {
-            match ctx.eval::<Value, _>(source.as_str()) {
-                Ok(val) => {
-                    let s = display_value(val);
-                    if s != "undefined" && s != "[object]" {
-                        println!("{s}");
-                    }
-                }
-                Err(_) => {
-                    let msg = ctx
-                        .catch()
-                        .as_exception()
-                        .map(|exc| {
-                            let msg = exc.message().unwrap_or_default();
-                            let stack = exc.stack().unwrap_or_default();
-                            if stack.is_empty() {
-                                format!("Error: {msg}")
-                            } else {
-                                format!("Error: {msg}\n{stack}")
-                            }
-                        })
-                        .unwrap_or_else(|| "unknown error".to_string());
-                    println!("{msg}");
-                }
+            match ctx.eval::<Value, _>(wrapped.as_str()) {
+                Ok(_) => {}
+                Err(_) => print_js_error(&ctx),
             }
         });
 
-        // Drain Promise microtask queue so .then() chains execute
-        loop {
-            match runtime.execute_pending_job() {
-                Ok(true) => {}
-                Ok(false) => break,
-                Err(_) => { eprintln!("Unhandled promise rejection"); break; }
-            }
-        }
+        drain_jobs(&runtime);
 
         // Poll agents for messages from worker threads
         context.with(|ctx| agent::poll_agents(ctx.clone())).ok();
 
-        // Drain again in case onmessage handlers enqueued Promises
-        loop {
-            match runtime.execute_pending_job() {
-                Ok(true) => {}
-                Ok(false) => break,
-                Err(_) => { eprintln!("Unhandled promise rejection"); break; }
-            }
-        }
+        drain_jobs(&runtime);
     }
 }
