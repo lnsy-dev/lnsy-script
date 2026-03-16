@@ -537,14 +537,20 @@ fn main() {
         let source = buffer.clone();
         buffer.clear();
 
-        // Wrap in async IIFE so top-level await works
-        let wrapped = format!(
-            "(async () => {{\n{}\n}})().catch(e => console.error(String(e)));",
-            source
-        );
-
         context.with(|ctx| {
-            match ctx.eval::<Value, _>(wrapped.as_str()) {
+            // Only wrap in async IIFE when top-level await is used; otherwise
+            // evaluate directly so var declarations persist across REPL lines.
+            let has_await = source.contains("await ");
+            let result = if has_await {
+                let wrapped = format!(
+                    "(async () => {{\n{}\n}})().catch(e => console.error(String(e)));",
+                    source
+                );
+                ctx.eval::<Value, _>(wrapped.as_str())
+            } else {
+                ctx.eval::<Value, _>(source.as_str())
+            };
+            match result {
                 Ok(_) => {}
                 Err(_) => print_js_error(&ctx),
             }
