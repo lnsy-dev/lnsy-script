@@ -232,6 +232,26 @@ check "Agent worker can use fetch" \
     "$SCRIPT_DIR/agent_fetch.js" \
     "200"
 
+check "Tools class and error types are defined as globals" \
+    "$SCRIPT_DIR/tools_class.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue')"
+
+check "Tools basic construction, hasTool, listTools, and direct call" \
+    "$SCRIPT_DIR/tools_basic.js" \
+    "$(printf 'true\nfalse\ntrue\ntrue\ntrue')"
+
+check "Tools.call with LLM tool_call object returns structured result" \
+    "$SCRIPT_DIR/tools_tool_call.js" \
+    "$(printf 'true\ntrue\ntrue')"
+
+check "Tools throws ToolNotFoundError, ToolRegistrationError, ToolValidationError" \
+    "$SCRIPT_DIR/tools_errors.js" \
+    "$(printf 'true\ntrue\ntrue')"
+
+check "Tools strips undeclared params and wraps handler errors in tool_call response" \
+    "$SCRIPT_DIR/tools_strip_params.js" \
+    "$(printf 'true\ntrue\ntrue')"
+
 # ---
 
 echo ""

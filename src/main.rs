@@ -10,6 +10,8 @@ mod knn;
 use knn::setup_knn;
 mod agent;
 use agent::setup_agent;
+mod tools;
+use tools::setup_tools;
 
 use rquickjs::{class::Trace, Class, Context, Ctx, Function, JsLifetime, Object, Runtime, Value};
 use rquickjs::prelude::Rest;
@@ -196,6 +198,7 @@ globalThis.fetch = function fetch(url, options) {
 
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class]
+#[allow(dead_code)]
 pub struct StaticServer {
     #[qjs(skip_trace)]
     root: String,
@@ -378,6 +381,7 @@ pub(crate) fn setup_context(ctx: Ctx<'_>) -> rquickjs::Result<()> {
     setup_vector_database(ctx.clone())?;
     setup_graph_database(ctx.clone())?;
     setup_knn(ctx.clone())?;
+    setup_tools(ctx.clone())?;
     setup_agent(ctx)?;
     Ok(())
 }

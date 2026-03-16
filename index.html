@@ -255,6 +255,10 @@ chmod +x lnsy-script
         <div class="cell-label">Static Server</div>
         <div class="cell-desc">HTTPS file server in a background thread. Self-signed TLS, zero config.</div>
       </div>
+      <div class="cell">
+        <div class="cell-label">Tools</div>
+        <div class="cell-desc">LLM tool-calling registry. Whitelist-only execution with JSON Schema validation.</div>
+      </div>
     </div>
   </section>
 
@@ -269,6 +273,7 @@ chmod +x lnsy-script
       <tr><td><code>fetch</code></td><td>HTTP client, Promise-based</td></tr>
       <tr><td><code>fs</code></td><td>readFile, writeFile, appendFile, deleteFile, exists, readDotEnv</td></tr>
       <tr><td><code>Promise</code></td><td>Full Promise/A+ implementation</td></tr>
+      <tr><td><code>Tools</code></td><td>LLM tool-calling registry and executor</td></tr>
     </table>
 
     <pre><code><span class="cmt">// file system</span>
@@ -447,6 +452,67 @@ g.<span class="fn">addNode</span>({ name: <span class="str">"Alice"</span> }).<s
 }).<span class="fn">then</span>(<span class="kw">function</span>(r) {
   console.<span class="fn">log</span>(r.status);  <span class="cmt">// 201</span>
 });</code></pre>
+  </section>
+
+  <!-- ── Tools ── -->
+  <section>
+    <h2>Tools</h2>
+    <p>A registry and executor for LLM tool-calling. Register named functions with JSON Schema parameter definitions — nothing can be invoked unless it's been explicitly added.</p>
+
+    <table>
+      <tr><th>Method</th><th>Description</th></tr>
+      <tr><td><code>addTool(def)</code></td><td>Register <code>{name, description, parameters, handler}</code></td></tr>
+      <tr><td><code>removeTool(name)</code></td><td>Remove a registered tool</td></tr>
+      <tr><td><code>hasTool(name)</code></td><td>Returns true if registered</td></tr>
+      <tr><td><code>listTools()</code></td><td>OpenAI-compatible tool schema array</td></tr>
+      <tr><td><code>call(name, args)</code></td><td>Direct call by name</td></tr>
+      <tr><td><code>call(tool_call)</code></td><td>Execute raw LLM tool_call object</td></tr>
+      <tr><td><code>callMany(tool_calls)</code></td><td>Execute array of tool_calls</td></tr>
+    </table>
+
+    <h3>Registration</h3>
+    <pre><code><span class="kw">var</span> toolbox = <span class="kw">new</span> <span class="cls">Tools</span>([{
+  name: <span class="str">'get_weather'</span>,
+  description: <span class="str">'Get current weather for a city'</span>,
+  parameters: {
+    type: <span class="str">'object'</span>,
+    properties: { city: { type: <span class="str">'string'</span> } },
+    required: [<span class="str">'city'</span>]
+  },
+  handler: <span class="kw">async function</span>(args) {
+    <span class="kw">var</span> r = <span class="kw">await</span> <span class="fn">fetch</span>(<span class="str">'https://api.example.com/weather?city='</span> + args.city);
+    <span class="kw">return</span> r.<span class="fn">json</span>();
+  }
+}]);</code></pre>
+
+    <h3>Direct call</h3>
+    <pre><code>toolbox.<span class="fn">call</span>(<span class="str">'get_weather'</span>, { city: <span class="str">'Portland'</span> }).<span class="fn">then</span>(<span class="kw">function</span>(result) {
+  console.<span class="fn">log</span>(result);
+});</code></pre>
+
+    <h3>LLM tool_call format</h3>
+    <pre><code><span class="cmt">// Pass the raw tool_call object from an LLM response</span>
+toolbox.<span class="fn">call</span>({
+  id: <span class="str">'call_abc123'</span>,
+  type: <span class="str">'function'</span>,
+  function: { name: <span class="str">'get_weather'</span>, arguments: <span class="str">'{"city":"Portland"}'</span> }
+}).<span class="fn">then</span>(<span class="kw">function</span>(r) {
+  console.<span class="fn">log</span>(r.tool_call_id);  <span class="cmt">// 'call_abc123'</span>
+  console.<span class="fn">log</span>(r.result);        <span class="cmt">// weather data</span>
+});
+
+<span class="cmt">// Batch — execute all tool_calls from an LLM response</span>
+toolbox.<span class="fn">callMany</span>(response.tool_calls).<span class="fn">then</span>(<span class="kw">function</span>(results) {
+  results.<span class="fn">forEach</span>(<span class="kw">function</span>(r) {
+    messages.<span class="fn">push</span>({
+      role: <span class="str">'tool'</span>,
+      tool_call_id: r.tool_call_id,
+      content: JSON.<span class="fn">stringify</span>(r.result)
+    });
+  });
+});</code></pre>
+
+    <p>When a handler throws at runtime, <code>call()</code> returns <code>{ tool_call_id, name, error: true, result: message }</code> rather than rejecting — so the LLM can recover gracefully. Missing required parameters and unregistered tool names throw <code>ToolValidationError</code> and <code>ToolNotFoundError</code> respectively. Extra undeclared parameters are silently stripped before the handler is invoked.</p>
   </section>
 
   <!-- ── Static Server ── -->

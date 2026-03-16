@@ -32,6 +32,7 @@ lnsy-script is a full JavaScript REPL and script runner. It supports modern JS s
 | `GraphDatabase` | Property graph (nodes + edges) |
 | `Agent` | Multi-threaded JavaScript workers |
 | `StaticServer` | Static file HTTPS server |
+| `Tools` | LLM tool-calling registry and executor |
 
 **Promise support** — all async operations return Promises and can be chained:
 
@@ -356,6 +357,92 @@ g.addNode({ name: "Alice", role: "engineer" }).then(function(id) {
   return g.getConnectedNodes(aliceId);
 }).then(function(neighbors) {
   console.log(neighbors[0].name);  // "Bob"
+});
+```
+
+---
+
+## Tools
+
+A registry and executor for LLM tool-calling. Register named functions with JSON Schema parameter definitions — nothing can be invoked unless it's been explicitly added.
+
+```javascript
+var toolbox = new Tools([
+  {
+    name: 'get_weather',
+    description: 'Get current weather for a city',
+    parameters: {
+      type: 'object',
+      properties: {
+        city: { type: 'string', description: 'City name' }
+      },
+      required: ['city']
+    },
+    handler: async function(args) {
+      var r = await fetch('https://api.example.com/weather?city=' + args.city);
+      return r.json();
+    }
+  }
+]);
+```
+
+**Registry methods:**
+
+| Method | Description |
+|--------|-------------|
+| `addTool(def)` | Register a tool definition `{name, description, parameters, handler}` |
+| `removeTool(name)` | Remove a registered tool |
+| `hasTool(name)` | Returns `true` if the tool is registered |
+| `listTools()` | Returns OpenAI-compatible tool schema array |
+
+**Execution:**
+
+```javascript
+// Direct call — you know the name and args
+var result = await toolbox.call('get_weather', { city: 'Portland' });
+
+// LLM tool_call object — pass the raw object from an LLM response
+var result = await toolbox.call({
+  id: 'call_abc123',
+  type: 'function',
+  function: { name: 'get_weather', arguments: '{"city":"Portland"}' }
+});
+// → { tool_call_id: 'call_abc123', name: 'get_weather', result: { ... } }
+
+// Batch — execute multiple tool calls concurrently
+var results = await toolbox.callMany(response.tool_calls);
+```
+
+**Behavior:**
+
+| Situation | Behavior |
+|-----------|----------|
+| Unregistered tool | Throws `ToolNotFoundError` |
+| Missing required parameter | Throws `ToolValidationError` |
+| Extra unknown parameters | Silently stripped before handler is called |
+| Handler throws at runtime | Returns `{ tool_call_id, name, error: true, result: message }` |
+| `arguments` is a JSON string | Parsed automatically |
+| Malformed JSON arguments | Throws `ToolValidationError` |
+| `addTool()` with duplicate name | Throws `ToolRegistrationError` |
+
+**Full loop example:**
+
+```javascript
+var toolbox = new Tools([/* ...tool definitions... */]);
+
+// 1. Send schemas to the LLM
+var response = await fetch('https://api.openai.com/v1/chat/completions', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + key },
+  body: JSON.stringify({ model: 'gpt-4o', messages: messages, tools: toolbox.listTools() })
+}).then(function(r) { return r.json(); });
+
+// 2. Execute all requested tool calls
+var toolResults = await toolbox.callMany(response.choices[0].message.tool_calls);
+
+// 3. Feed results back as tool messages
+toolResults.forEach(function(r) {
+  messages.push({ role: 'tool', tool_call_id: r.tool_call_id, content: JSON.stringify(r.result) });
 });
 ```
 

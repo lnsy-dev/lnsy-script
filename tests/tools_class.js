@@ -1,0 +1,1 @@
+console.log(typeof Tools === 'function'); console.log(typeof ToolNotFoundError === 'function'); console.log(typeof ToolValidationError === 'function'); console.log(typeof ToolRegistrationError === 'function');
