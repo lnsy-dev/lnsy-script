@@ -49,6 +49,25 @@ check() {
     fi
 }
 
+# Run a .js file directly (supports top-level await, no REPL scoping quirks)
+check_file() {
+    local name="$1"
+    local js_file="$2"
+    local expected="$3"
+
+    actual=$("$BINARY" "$js_file" 2>/dev/null || true)
+
+    if [ "$actual" = "$expected" ]; then
+        printf "${GREEN}PASS${NC}  %s\n" "$name"
+        PASS=$((PASS + 1))
+    else
+        printf "${RED}FAIL${NC}  %s\n" "$name"
+        echo "  expected: |$(echo "$expected" | head -5)|"
+        echo "  actual:   |$(echo "$actual" | head -5)|"
+        FAIL=$((FAIL + 1))
+    fi
+}
+
 check_stderr() {
     local name="$1"
     local js_file="$2"
@@ -251,6 +270,38 @@ check "Tools throws ToolNotFoundError, ToolRegistrationError, ToolValidationErro
 check "Tools strips undeclared params and wraps handler errors in tool_call response" \
     "$SCRIPT_DIR/tools_strip_params.js" \
     "$(printf 'true\ntrue\ntrue')"
+
+check "cl basic: stdout, stderr, code, success, duration" \
+    "$SCRIPT_DIR/cl_basic.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue')"
+
+check "cl non-zero exit resolves (does not reject)" \
+    "$SCRIPT_DIR/cl_nonzero.js" \
+    "$(printf 'true\ntrue')"
+
+check "cl command not found rejects with Error" \
+    "$SCRIPT_DIR/cl_notfound.js" \
+    "$(printf 'true\ntrue\ntrue')"
+
+check "cl timeout rejects with message and partial result" \
+    "$SCRIPT_DIR/cl_timeout.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue')"
+
+check_file "cl onStatus receives chunk/stream/elapsed/kill on each chunk" \
+    "$SCRIPT_DIR/cl_onstatus.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue\ntrue')"
+
+check_file "cl kill() from onStatus terminates process early" \
+    "$SCRIPT_DIR/cl_kill.js" \
+    "$(printf 'true\ntrue\ntrue')"
+
+check "cl options: cwd, env, stdin" \
+    "$SCRIPT_DIR/cl_opts.js" \
+    "$(printf 'true\ntrue\ntrue')"
+
+check_file "cl slow command streams incrementally and completes" \
+    "$SCRIPT_DIR/cl_slow.js" \
+    "$(printf 'true\ntrue\ntrue\ntrue\ntrue\ntrue')"
 
 # ---
 

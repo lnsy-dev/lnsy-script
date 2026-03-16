@@ -12,6 +12,8 @@ mod agent;
 use agent::setup_agent;
 mod tools;
 use tools::setup_tools;
+mod cl;
+use cl::setup_cl;
 
 use rquickjs::{class::Trace, Class, Context, Ctx, Function, JsLifetime, Module, Object, Runtime, Value};
 use rquickjs::loader::{FileResolver, ScriptLoader};
@@ -187,10 +189,49 @@ pub struct StaticServer {
 impl StaticServer {
     #[qjs(constructor)]
     pub fn new(root: String, port: u16) -> rquickjs::Result<Self> {
-        println!("StaticServer: add to /etc/hosts if not already present:");
-        println!("  127.0.0.1  lnsy-static.local");
-        println!("Access at: https://lnsy-static.local:{port}");
-        println!("(Browser will warn about self-signed cert — proceed anyway)");
+        let cert_path = dirs::home_dir()
+            .expect("home dir")
+            .join(".lnsy/lnsy-static.crt");
+        let cert_str = cert_path.display().to_string();
+
+        println!("StaticServer starting at https://lnsy-static.local:{port}");
+        println!();
+        println!("1. Add to /etc/hosts (if not already present):");
+        println!("     echo '127.0.0.1  lnsy-static.local' | sudo tee -a /etc/hosts");
+        println!();
+        println!("2. Trust the certificate (one-time setup):");
+        println!("   Certificate saved at: {cert_str}");
+
+        #[cfg(target_os = "macos")]
+        {
+            println!();
+            println!("   macOS — add to System Keychain:");
+            println!("     sudo security add-trusted-cert -d -r trustRoot \\");
+            println!("       -k /Library/Keychains/System.keychain \\");
+            println!("       \"{cert_str}\"");
+            println!("   Then restart your browser.");
+        }
+
+        #[cfg(target_os = "linux")]
+        {
+            println!();
+            println!("   Linux / Chrome & Chromium:");
+            println!("     mkdir -p $HOME/.pki/nssdb");
+            println!("     certutil -d sql:$HOME/.pki/nssdb -A -t 'C,,' \\");
+            println!("       -n 'lnsy-static.local' -i \"{cert_str}\"");
+            println!();
+            println!("   Linux / Firefox:");
+            println!("     # find your profile dir with: ls $HOME/.mozilla/firefox/");
+            println!("     certutil -d sql:$HOME/.mozilla/firefox/<PROFILE>.default-release \\");
+            println!("       -A -t 'CT,,' -n 'lnsy-static.local' -i \"{cert_str}\"");
+            println!();
+            println!("   Linux / System-wide (Ubuntu/Debian):");
+            println!("     sudo cp \"{cert_str}\" /usr/local/share/ca-certificates/lnsy-static.crt");
+            println!("     sudo update-ca-certificates");
+        }
+
+        println!();
+
         let root_clone = root.clone();
         std::thread::spawn(move || run_static_server(root_clone, port));
         Ok(StaticServer { root, port })
@@ -269,6 +310,32 @@ fn setup_static_server(ctx: Ctx) -> rquickjs::Result<()> {
     Class::<StaticServer>::define(&ctx.globals())
 }
 
+fn get_or_create_cert() -> (Vec<u8>, Vec<u8>) {
+    let cert_dir = dirs::home_dir().expect("home dir").join(".lnsy");
+    std::fs::create_dir_all(&cert_dir).ok();
+    let cert_path = cert_dir.join("lnsy-static.crt");
+    let key_path = cert_dir.join("lnsy-static.key");
+
+    if cert_path.exists() && key_path.exists() {
+        let cert_pem = std::fs::read(&cert_path).expect("read cert");
+        let key_pem = std::fs::read(&key_path).expect("read key");
+        return (cert_pem, key_pem);
+    }
+
+    let cert = rcgen::generate_simple_self_signed(vec![
+        "lnsy-static.local".to_string(),
+        "localhost".to_string(),
+    ])
+    .expect("cert generation");
+
+    let cert_pem = cert.cert.pem().into_bytes();
+    let key_pem = cert.key_pair.serialize_pem().into_bytes();
+
+    std::fs::write(&cert_path, &cert_pem).expect("write cert");
+    std::fs::write(&key_path, &key_pem).expect("write key");
+    (cert_pem, key_pem)
+}
+
 fn run_static_server(root: String, port: u16) {
     let rt = tokio::runtime::Builder::new_multi_thread()
         .enable_all()
@@ -278,17 +345,15 @@ fn run_static_server(root: String, port: u16) {
     rt.block_on(async move {
         let _ = rustls::crypto::ring::default_provider().install_default();
 
-        let cert = rcgen::generate_simple_self_signed(vec![
-            "lnsy-static.local".to_string(),
-            "localhost".to_string(),
-        ])
-        .expect("cert generation");
+        let (cert_pem, key_pem) = get_or_create_cert();
 
-        let cert_der = cert.cert.der().clone();
-        let key_der = rustls::pki_types::PrivateKeyDer::try_from(
-            cert.key_pair.serialize_der(),
-        )
-        .expect("key serialize");
+        let cert_der = rustls_pemfile::certs(&mut cert_pem.as_slice())
+            .next()
+            .expect("cert entry")
+            .expect("cert parse");
+        let key_der = rustls_pemfile::private_key(&mut key_pem.as_slice())
+            .expect("key parse")
+            .expect("no key found");
 
         let tls_config = rustls::ServerConfig::builder()
             .with_no_client_auth()
@@ -359,6 +424,7 @@ pub(crate) fn setup_context(ctx: Ctx<'_>) -> rquickjs::Result<()> {
     setup_graph_database(ctx.clone())?;
     setup_knn(ctx.clone())?;
     setup_tools(ctx.clone())?;
+    setup_cl(ctx.clone())?;
     setup_agent(ctx)?;
     Ok(())
 }

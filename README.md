@@ -25,6 +25,7 @@ lnsy-script is a full JavaScript REPL and script runner. It supports modern JS s
 | `console` | `log`, `warn`, `error` |
 | `fetch` | HTTP client (Promise-based) |
 | `fs` | File system utilities |
+| `cl` | Run shell commands, stream output |
 | `KNN` | k-nearest neighbor classifier |
 | `EmbeddingServer` | BERT-based NLP (embeddings, QA, sentiment, NER) |
 | `Database` | SQLite with full-text search |
@@ -54,6 +55,83 @@ fs.deleteFile("/tmp/notes.txt");
 
 var env = fs.readDotEnv(".env");           // parse .env → object
 ```
+
+---
+
+## cl
+
+Run shell commands from JavaScript. Returns a Promise that resolves with the full result, or rejects on timeout or command-not-found.
+
+```javascript
+cl(command, opts?)  // → Promise<{ stdout, stderr, code, success, duration }>
+```
+
+**Options:**
+
+| Option | Type | Description |
+|--------|------|-------------|
+| `cwd` | string | Working directory |
+| `env` | object | Extra environment variables |
+| `timeout` | number | Milliseconds before the process is killed |
+| `shell` | string | Shell to use (default: `$SHELL` or `/bin/sh`) |
+| `stdin` | string | Data to pipe to the process's stdin |
+| `onStatus` | function | Called with each chunk of output as it arrives |
+
+**Result:**
+
+```javascript
+{
+  stdout:   string,  // captured stdout
+  stderr:   string,  // captured stderr
+  code:     number,  // exit code
+  success:  boolean, // true if code === 0
+  duration: number   // elapsed milliseconds
+}
+```
+
+**Examples:**
+
+```javascript
+// Simple command
+const result = await cl("echo hello");
+console.log(result.stdout);   // "hello\n"
+console.log(result.success);  // true
+
+// With options
+const r = await cl("ls -la", { cwd: "/tmp", timeout: 5000 });
+console.log(r.stdout);
+
+// Stream output chunk by chunk
+await cl("ping -c 4 example.com", {
+  onStatus: function(s) {
+    process.stdout.write(s.chunk);  // s.stream, s.elapsed, s.kill()
+  }
+});
+
+// Kill from onStatus
+await cl("sleep 60", {
+  onStatus: function(s) {
+    if (s.elapsed > 1000) s.kill();
+  }
+});
+```
+
+**Errors:**
+
+```javascript
+// Command not found — rejects with Error
+cl("nonexistent-command").catch(function(e) {
+  console.error(e.message);  // "nonexistent-command: command not found"
+});
+
+// Timeout — rejects with err.result containing partial output
+cl("sleep 60", { timeout: 500 }).catch(function(e) {
+  console.log(e.message);        // "command timed out after 500ms"
+  console.log(e.result.stdout);  // output captured before kill
+});
+```
+
+Non-zero exit codes do **not** reject — check `result.code` or `result.success`.
 
 ---
 
@@ -457,7 +535,47 @@ new StaticServer("/path/to/www", 8443);
 // → https://lnsy-static.local:8443
 ```
 
-Uses a self-signed TLS certificate. Runs in a background thread and does not block the JS event loop.
+Runs in a background thread and does not block the JS event loop. On first run, a self-signed TLS certificate is generated and saved to `~/.lnsy/lnsy-static.crt` — subsequent runs reuse it so you only need to trust it once.
+
+### Setup (one-time)
+
+**1. Add the hostname to `/etc/hosts`:**
+
+```sh
+echo '127.0.0.1  lnsy-static.local' | sudo tee -a /etc/hosts
+```
+
+**2. Trust the certificate in your browser:**
+
+macOS:
+```sh
+sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain \
+  ~/.lnsy/lnsy-static.crt
+```
+Then restart your browser.
+
+Linux — Chrome / Chromium:
+```sh
+mkdir -p $HOME/.pki/nssdb
+certutil -d sql:$HOME/.pki/nssdb -A -t 'C,,' \
+  -n 'lnsy-static.local' -i ~/.lnsy/lnsy-static.crt
+```
+
+Linux — Firefox:
+```sh
+# find your profile dir with: ls $HOME/.mozilla/firefox/
+certutil -d sql:$HOME/.mozilla/firefox/<PROFILE>.default-release \
+  -A -t 'CT,,' -n 'lnsy-static.local' -i ~/.lnsy/lnsy-static.crt
+```
+
+Linux — system-wide (Ubuntu / Debian):
+```sh
+sudo cp ~/.lnsy/lnsy-static.crt /usr/local/share/ca-certificates/lnsy-static.crt
+sudo update-ca-certificates
+```
+
+After trusting the cert, the server is accessible at `https://lnsy-static.local:<port>` without any browser warning. The startup output will print these instructions with the exact cert path each time.
 
 ---
 

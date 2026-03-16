@@ -71,6 +71,58 @@ fs.readDotEnv(".env").then(function(env) {
 
 ---
 
+### `cl`
+
+Run shell commands. Returns a Promise resolving with `{ stdout, stderr, code, success, duration }`.
+
+```javascript
+// Basic usage
+const result = await cl("git log --oneline -5");
+console.log(result.stdout);
+console.log(result.success);  // true if exit code 0
+
+// With options
+const r = await cl("npm test", {
+  cwd: "/path/to/project",
+  timeout: 30000,
+  env: { NODE_ENV: "test" }
+});
+
+// Stream output as it arrives
+await cl("make build", {
+  onStatus: function(s) {
+    // s.stream  → "stdout" or "stderr"
+    // s.chunk   → string data for this chunk
+    // s.elapsed → milliseconds since start
+    // s.kill()  → terminate the process early
+    console.log(s.chunk);
+  }
+});
+
+// Pipe data to stdin
+const r = await cl("cat", { stdin: "hello world" });
+console.log(r.stdout);  // "hello world"
+```
+
+**Error handling:**
+
+```javascript
+// Non-zero exit — resolves (does not reject); check result.code
+const r = await cl("exit 1");
+console.log(r.code);     // 1
+console.log(r.success);  // false
+
+// Command not found — rejects
+cl("nonexistent").catch(e => console.error(e.message));
+
+// Timeout — rejects; err.result has partial output captured so far
+cl("sleep 60", { timeout: 500 }).catch(e => {
+  console.log(e.result.stdout);
+});
+```
+
+---
+
 ### `Tools`
 
 Registers JavaScript functions as LLM-compatible tools. Accepts OpenAI-style `tool_calls` responses directly.

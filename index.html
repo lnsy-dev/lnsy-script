@@ -145,6 +145,15 @@
       color: var(--dim);
     }
 
+    .cell-label a {
+      color: var(--gold);
+      text-decoration: none;
+    }
+
+    .cell-label a:hover {
+      text-decoration: underline;
+    }
+
     /* ── table ── */
     table {
       width: 100%;
@@ -228,42 +237,46 @@ chmod +x lnsy-script
 
     <div class="grid">
       <div class="cell">
-        <div class="cell-label">Runtime</div>
+        <div class="cell-label"><a href="#runtime">Runtime</a></div>
         <div class="cell-desc">QuickJS engine via rquickjs. REPL + script mode. Full Promise support.</div>
       </div>
       <div class="cell">
-        <div class="cell-label">BERT / NLP</div>
+        <div class="cell-label"><a href="#bert">BERT / NLP</a></div>
         <div class="cell-desc">Embeddings, sentiment, extractive QA, named entity recognition.</div>
       </div>
       <div class="cell">
-        <div class="cell-label">KNN</div>
+        <div class="cell-label"><a href="#knn">KNN</a></div>
         <div class="cell-desc">Text classification over MiniLM embeddings. Persistent JSON storage.</div>
       </div>
       <div class="cell">
-        <div class="cell-label">Agents</div>
+        <div class="cell-label"><a href="#agents">Agents</a></div>
         <div class="cell-desc">JS workers in isolated OS threads. Message-passing concurrency.</div>
       </div>
       <div class="cell">
-        <div class="cell-label">Databases</div>
+        <div class="cell-label"><a href="#databases">Databases</a></div>
         <div class="cell-desc">SQLite, vector store, and property graph — all persistent.</div>
       </div>
       <div class="cell">
-        <div class="cell-label">Fetch</div>
+        <div class="cell-label"><a href="#fetch">Fetch</a></div>
         <div class="cell-desc">Standards-compatible HTTP client backed by Rust reqwest.</div>
       </div>
       <div class="cell">
-        <div class="cell-label">Static Server</div>
+        <div class="cell-label"><a href="#cl">cl</a></div>
+        <div class="cell-desc">Run shell commands. Promise-based, streaming output, timeout and kill support.</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label"><a href="#static-server">Static Server</a></div>
         <div class="cell-desc">HTTPS file server in a background thread. Self-signed TLS, zero config.</div>
       </div>
       <div class="cell">
-        <div class="cell-label">Tools</div>
+        <div class="cell-label"><a href="#tools">Tools</a></div>
         <div class="cell-desc">LLM tool-calling registry. Whitelist-only execution with JSON Schema validation.</div>
       </div>
     </div>
   </section>
 
   <!-- ── Runtime ── -->
-  <section>
+  <section id="runtime">
     <h2>JavaScript Runtime</h2>
     <p>Standard globals available in every context:</p>
 
@@ -272,6 +285,7 @@ chmod +x lnsy-script
       <tr><td><code>console</code></td><td>log, warn, error</td></tr>
       <tr><td><code>fetch</code></td><td>HTTP client, Promise-based</td></tr>
       <tr><td><code>fs</code></td><td>readFile, writeFile, appendFile, deleteFile, exists, readDotEnv</td></tr>
+      <tr><td><code>cl</code></td><td>Run shell commands, stream output</td></tr>
       <tr><td><code>Promise</code></td><td>Full Promise/A+ implementation</td></tr>
       <tr><td><code>Tools</code></td><td>LLM tool-calling registry and executor</td></tr>
     </table>
@@ -287,8 +301,53 @@ console.warn(<span class="str">"something off"</span>);
 console.error(<span class="str">"fatal"</span>);</code></pre>
   </section>
 
+  <!-- ── cl ── -->
+  <section id="cl">
+    <h2>cl</h2>
+    <p>Run shell commands from JavaScript. Returns a Promise that resolves with the full result, or rejects on timeout or command-not-found.</p>
+
+    <table>
+      <tr><th>Option</th><th>Description</th></tr>
+      <tr><td><code>cwd</code></td><td>Working directory</td></tr>
+      <tr><td><code>env</code></td><td>Extra environment variables</td></tr>
+      <tr><td><code>timeout</code></td><td>Milliseconds before the process is killed</td></tr>
+      <tr><td><code>shell</code></td><td>Shell to use (default: <code>$SHELL</code> or <code>/bin/sh</code>)</td></tr>
+      <tr><td><code>stdin</code></td><td>Data piped to the process's stdin</td></tr>
+      <tr><td><code>onStatus</code></td><td>Callback invoked per output chunk — receives <code>{ stream, chunk, elapsed, kill }</code></td></tr>
+    </table>
+
+    <h3>Basic usage</h3>
+    <pre><code><span class="kw">var</span> result = <span class="kw">await</span> <span class="fn">cl</span>(<span class="str">"git log --oneline -5"</span>);
+console.<span class="fn">log</span>(result.stdout);   <span class="cmt">// captured output</span>
+console.<span class="fn">log</span>(result.success);  <span class="cmt">// true if exit code 0</span>
+console.<span class="fn">log</span>(result.code);     <span class="cmt">// numeric exit code</span>
+console.<span class="fn">log</span>(result.duration); <span class="cmt">// elapsed ms</span></code></pre>
+
+    <h3>Streaming output</h3>
+    <pre><code><span class="kw">await</span> <span class="fn">cl</span>(<span class="str">"ping -c 4 example.com"</span>, {
+  onStatus: <span class="kw">function</span>(s) {
+    <span class="cmt">// s.stream  → "stdout" or "stderr"</span>
+    <span class="cmt">// s.chunk   → data for this chunk</span>
+    <span class="cmt">// s.elapsed → ms since start</span>
+    <span class="cmt">// s.kill()  → terminate early</span>
+    console.<span class="fn">log</span>(s.chunk);
+  }
+});</code></pre>
+
+    <h3>Errors</h3>
+    <pre><code><span class="cmt">// Command not found — rejects</span>
+<span class="fn">cl</span>(<span class="str">"nonexistent"</span>).<span class="fn">catch</span>(<span class="kw">function</span>(e) { console.<span class="fn">log</span>(e.message); });
+
+<span class="cmt">// Timeout — rejects; err.result has partial output</span>
+<span class="fn">cl</span>(<span class="str">"sleep 60"</span>, { timeout: <span class="num">500</span> }).<span class="fn">catch</span>(<span class="kw">function</span>(e) {
+  console.<span class="fn">log</span>(e.result.stdout);
+});</code></pre>
+
+    <p>Non-zero exit codes do <em>not</em> reject — check <code>result.code</code> or <code>result.success</code>.</p>
+  </section>
+
   <!-- ── KNN ── -->
-  <section>
+  <section id="knn">
     <h2>KNN</h2>
     <p>Text classification using k-nearest neighbors over MiniLM sentence embeddings (384-dimensional). Supports persistence to JSON.</p>
 
@@ -313,7 +372,7 @@ knn.<span class="fn">train</span>([
   </section>
 
   <!-- ── BERT ── -->
-  <section>
+  <section id="bert">
     <h2>BERT</h2>
     <p>Transformer inference via <code>EmbeddingServer</code>. All ONNX models are bundled in the binary.</p>
 
@@ -352,7 +411,7 @@ es.<span class="fn">getSentiment</span>(<span class="str">"I absolutely love thi
   </section>
 
   <!-- ── Agents ── -->
-  <section>
+  <section id="agents">
     <h2>Agents</h2>
     <p>Multi-threaded JavaScript workers. Each agent runs in its own OS thread with a full runtime — including access to <code>KNN</code>, <code>EmbeddingServer</code>, <code>fetch</code>, and databases.</p>
 
@@ -380,7 +439,7 @@ self.onmessage = <span class="kw">function</span>(event) {
   </section>
 
   <!-- ── Databases ── -->
-  <section>
+  <section id="databases">
     <h2>Databases</h2>
 
     <h3>SQLite — <code>Database</code></h3>
@@ -427,7 +486,7 @@ g.<span class="fn">addNode</span>({ name: <span class="str">"Alice"</span> }).<s
   </section>
 
   <!-- ── Fetch ── -->
-  <section>
+  <section id="fetch">
     <h2>Fetch</h2>
     <p>Standards-compatible <code>fetch</code> backed by Rust's <code>reqwest</code>. Supports GET, POST, PUT, DELETE, and PATCH.</p>
 
@@ -455,7 +514,7 @@ g.<span class="fn">addNode</span>({ name: <span class="str">"Alice"</span> }).<s
   </section>
 
   <!-- ── Tools ── -->
-  <section>
+  <section id="tools">
     <h2>Tools</h2>
     <p>A registry and executor for LLM tool-calling. Register named functions with JSON Schema parameter definitions — nothing can be invoked unless it's been explicitly added.</p>
 
@@ -516,20 +575,46 @@ toolbox.<span class="fn">callMany</span>(response.tool_calls).<span class="fn">t
   </section>
 
   <!-- ── Static Server ── -->
-  <section>
+  <section id="static-server">
     <h2>Static Server</h2>
-    <p>Serve a local directory over HTTPS from a background thread. Uses a self-signed TLS certificate and does not block the JS event loop.</p>
+    <p>Serve a local directory over HTTPS from a background thread. Does not block the JS event loop. On first run a self-signed TLS certificate is generated and saved to <code>~/.lnsy/lnsy-static.crt</code> — subsequent runs reuse it so you only need to trust it once.</p>
 
     <pre><code><span class="kw">new</span> <span class="cls">StaticServer</span>(<span class="str">"/path/to/www"</span>, <span class="num">8443</span>);
 <span class="cmt">// → https://lnsy-static.local:8443</span></code></pre>
 
-    <p>Useful for local development workflows — spin up a server, then drive it with <code>fetch</code> or test it from a browser, all within a single script.</p>
+    <p>Useful for local development — spin up a server, then drive it with <code>fetch</code> or test it from a browser, all within a single script.</p>
 
     <pre><code><span class="kw">new</span> <span class="cls">StaticServer</span>(<span class="str">"./public"</span>, <span class="num">8443</span>);
 
 <span class="fn">fetch</span>(<span class="str">"https://lnsy-static.local:8443/data.json"</span>)
   .<span class="fn">then</span>(<span class="kw">function</span>(r) { <span class="kw">return</span> r.<span class="fn">json</span>(); })
   .<span class="fn">then</span>(<span class="kw">function</span>(data) { console.<span class="fn">log</span>(data); });</code></pre>
+
+    <h3>One-time setup</h3>
+    <p>Add the hostname to <code>/etc/hosts</code>:</p>
+    <pre><code>echo '127.0.0.1  lnsy-static.local' | sudo tee -a /etc/hosts</code></pre>
+
+    <p>Then trust the certificate. The startup output will print the exact path and the right command for your OS.</p>
+
+    <p>macOS — add to System Keychain:</p>
+    <pre><code>sudo security add-trusted-cert -d -r trustRoot \
+  -k /Library/Keychains/System.keychain \
+  ~/.lnsy/lnsy-static.crt</code></pre>
+
+    <p>Linux — Chrome / Chromium:</p>
+    <pre><code>mkdir -p $HOME/.pki/nssdb
+certutil -d sql:$HOME/.pki/nssdb -A -t 'C,,' \
+  -n 'lnsy-static.local' -i ~/.lnsy/lnsy-static.crt</code></pre>
+
+    <p>Linux — Firefox:</p>
+    <pre><code>certutil -d sql:$HOME/.mozilla/firefox/&lt;PROFILE&gt;.default-release \
+  -A -t 'CT,,' -n 'lnsy-static.local' -i ~/.lnsy/lnsy-static.crt</code></pre>
+
+    <p>Linux — system-wide (Ubuntu / Debian):</p>
+    <pre><code>sudo cp ~/.lnsy/lnsy-static.crt /usr/local/share/ca-certificates/lnsy-static.crt
+sudo update-ca-certificates</code></pre>
+
+    <p>Restart your browser after trusting. The certificate persists across server restarts — this is a one-time step.</p>
   </section>
 
   <footer>lnsy-script &mdash; MIT &mdash; <a href="AGENTS.md" style="color:var(--dim);text-decoration:none;">AGENTS.md</a></footer>
