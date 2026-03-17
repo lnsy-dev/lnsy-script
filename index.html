@@ -249,6 +249,10 @@ chmod +x lnsy-script
         <div class="cell-desc">Text classification over MiniLM embeddings. Persistent JSON storage.</div>
       </div>
       <div class="cell">
+        <div class="cell-label"><a href="#trm">TRM</a></div>
+        <div class="cell-desc">Tiny Recursive Model. Neural text classifier with recursive H/L-cycle reasoning.</div>
+      </div>
+      <div class="cell">
         <div class="cell-label"><a href="#agents">Agents</a></div>
         <div class="cell-desc">JS workers in isolated OS threads. Message-passing concurrency.</div>
       </div>
@@ -366,6 +370,31 @@ knn.<span class="fn">train</span>([
   { text: <span class="str">"Absolutely awful"</span>, label: <span class="str">"negative"</span> }
 ]).<span class="fn">then</span>(<span class="kw">function</span>() {
   <span class="kw">return</span> knn.<span class="fn">classify</span>(<span class="str">"This is wonderful"</span>);
+}).<span class="fn">then</span>(<span class="kw">function</span>(label) {
+  console.<span class="fn">log</span>(label);  <span class="cmt">// "positive"</span>
+});</code></pre>
+  </section>
+
+  <!-- ── TRM ── -->
+  <section id="trm">
+    <h2>TRM</h2>
+    <p>Neural text classification using a Tiny Recursive Model with recursive H-cycle/L-cycle reasoning (~7M params). Trained from scratch on your labeled examples and persisted to a directory. Unlike KNN, TRM learns a neural network — each call to <code>train()</code> triggers a full retrain.</p>
+
+    <table>
+      <tr><th>Method</th><th>Description</th></tr>
+      <tr><td><code>train(data)</code></td><td>Train on <code>[{text, label}]</code> — appends data and retrains</td></tr>
+      <tr><td><code>trainText(texts, labels)</code></td><td>Train on separate arrays — appends and retrains</td></tr>
+      <tr><td><code>query(text, k?)</code></td><td>Return top-k <code>[{label, score}]</code> with softmax probabilities</td></tr>
+      <tr><td><code>classify(text)</code></td><td>Return the highest-probability label</td></tr>
+    </table>
+
+    <pre><code><span class="kw">var</span> trm = <span class="kw">new</span> <span class="cls">TRM</span>(<span class="str">"./model_dir/"</span>);
+
+trm.<span class="fn">train</span>([
+  { text: <span class="str">"I love this"</span>,    label: <span class="str">"positive"</span> },
+  { text: <span class="str">"Absolutely awful"</span>, label: <span class="str">"negative"</span> }
+]).<span class="fn">then</span>(<span class="kw">function</span>() {
+  <span class="kw">return</span> trm.<span class="fn">classify</span>(<span class="str">"This is wonderful"</span>);
 }).<span class="fn">then</span>(<span class="kw">function</span>(label) {
   console.<span class="fn">log</span>(label);  <span class="cmt">// "positive"</span>
 });</code></pre>

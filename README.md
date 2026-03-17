@@ -27,6 +27,7 @@ lnsy-script is a full JavaScript REPL and script runner. It supports modern JS s
 | `fs` | File system utilities |
 | `cl` | Run shell commands, stream output |
 | `KNN` | k-nearest neighbor classifier |
+| `TRM` | Tiny Recursive Model neural text classifier |
 | `EmbeddingServer` | BERT-based NLP (embeddings, QA, sentiment, NER) |
 | `Database` | SQLite with full-text search |
 | `VectorDatabase` | Embedding store with similarity search |
@@ -180,6 +181,55 @@ knn.query("great purchase", 3).then(function(results) {
   // positive - 0.94
   // positive - 0.91
   // negative - 0.43
+});
+```
+
+---
+
+## TRM
+
+Neural text classification using a Tiny Recursive Model (TRM) with H-cycle/L-cycle recursive reasoning. The model (~7M parameters) is trained from scratch on your labeled examples and persisted to a directory. Unlike KNN, TRM learns a neural network — calling `train()` or `trainText()` triggers a full retrain.
+
+```javascript
+var trm = new TRM();              // in-memory (no persistence)
+var trm = new TRM("model_dir/");  // persists checkpoint + vocab + data to directory
+```
+
+**Methods:**
+
+| Method | Description |
+|--------|-------------|
+| `train(data)` | Train on `[{text, label}, ...]` — appends data and retrains |
+| `trainText(texts, labels)` | Train on separate text/label arrays — appends and retrains |
+| `query(text, k?)` | Return top-k `[{label, score}]` with softmax probabilities |
+| `classify(text)` | Return the highest-probability label |
+
+**Example:**
+
+```javascript
+var trm = new TRM("./sentiment_model/");
+
+trm.train([
+  { text: "I love this product",    label: "positive" },
+  { text: "Absolutely wonderful",   label: "positive" },
+  { text: "Terrible experience",    label: "negative" },
+  { text: "Complete waste of time", label: "negative" }
+]).then(function() {
+  return trm.classify("This is amazing");
+}).then(function(label) {
+  console.log(label);  // "positive"
+});
+```
+
+**Query with scores:**
+
+```javascript
+trm.query("great purchase", 2).then(function(results) {
+  results.forEach(function(r) {
+    console.log(r.label + " - " + r.score);
+  });
+  // positive - 0.87
+  // negative - 0.13
 });
 ```
 

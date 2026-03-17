@@ -8,6 +8,8 @@ mod graph_database;
 use graph_database::setup_graph_database;
 mod knn;
 use knn::setup_knn;
+mod trm;
+use trm::setup_trm;
 mod agent;
 use agent::setup_agent;
 mod tools;
@@ -423,6 +425,7 @@ pub(crate) fn setup_context(ctx: Ctx<'_>) -> rquickjs::Result<()> {
     setup_vector_database(ctx.clone())?;
     setup_graph_database(ctx.clone())?;
     setup_knn(ctx.clone())?;
+    setup_trm(ctx.clone())?;
     setup_tools(ctx.clone())?;
     setup_cl(ctx.clone())?;
     setup_agent(ctx)?;

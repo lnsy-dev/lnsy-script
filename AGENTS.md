@@ -324,6 +324,39 @@ knn.query("This works great", 3)
 
 ---
 
+### `TRM`
+
+Tiny Recursive Model neural text classifier using recursive H-cycle/L-cycle reasoning (~7M params). Unlike KNN, TRM trains a neural network — a full retrain runs on every call to `train()` or `trainText()`. Persists the model weights, config, and training data to a directory.
+
+```javascript
+var trm = new TRM();              // in-memory (no persistence)
+var trm = new TRM("model_dir/");  // persists to directory
+
+// Train with labeled examples
+trm.train([
+  { text: "I love this product", label: "positive" },
+  { text: "This is terrible",    label: "negative" },
+  { text: "Absolutely wonderful", label: "positive" },
+  { text: "Awful experience",    label: "negative" }
+]).then(function() { console.log("Trained"); });
+
+// Classify new text (returns top label string)
+trm.classify("This is amazing")
+  .then(function(label) { console.log(label); });  // "positive"
+
+// Query for top-k results with softmax probability scores
+trm.query("This works great", 2)
+  .then(function(results) {
+    results.forEach(function(r) {
+      console.log(r.label, r.score);
+    });
+    // positive 0.87
+    // negative 0.13
+  });
+```
+
+---
+
 ### `EmbeddingServer`
 
 BERT/ONNX models embedded in the binary. No external service required.
