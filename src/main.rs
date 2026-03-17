@@ -489,6 +489,10 @@ fn main() {
     // Run a script file if provided as argument
     let args: Vec<String> = std::env::args().collect();
     if args.len() > 1 {
+        if args[1] == "--agents" {
+            print!("{}", include_str!("../AGENTS.md"));
+            return;
+        }
         run_file(&runtime, &context, &args[1]);
         return;
     }
