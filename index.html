@@ -217,17 +217,23 @@
     <h2>Download</h2>
     <p>Pre-built binaries are available on the <a href="https://github.com/lnsy-dev/lnsy-script/releases/latest" style="color:var(--gold);text-decoration:none;">GitHub releases page</a>.</p>
 
-    <h3>macOS</h3>
+    <h3>macOS &amp; Linux — install system-wide</h3>
     <pre><code>git clone git@github.com:lnsy-dev/lnsy-script.git
 cd lnsy-script
-cargo build --release
-./target/release/lnsy-script          # start REPL
-./target/release/lnsy-script file.js  # run a script file</code></pre>
+cargo install --path .</code></pre>
 
-    <h3>Linux (x86_64)</h3>
+    <p>Builds a release binary and places it in <code>~/.cargo/bin/lnsy-script</code>, which is on <code>$PATH</code> for any standard Rust install. After that, <code>lnsy-script</code> works from anywhere:</p>
+
+    <pre><code>lnsy-script          # start REPL
+lnsy-script file.js  # run a script file</code></pre>
+
+    <h3>Update</h3>
+    <pre><code>git pull &amp;&amp; cargo install --path . --force</code></pre>
+
+    <h3>Linux (x86_64) — pre-built binary</h3>
     <pre><code>curl -L https://github.com/lnsy-dev/lnsy-script/releases/latest/download/lnsy-script-linux-x86_64 -o lnsy-script
 chmod +x lnsy-script
-./lnsy-script</code></pre>
+sudo mv lnsy-script /usr/local/bin/</code></pre>
   </section>
 
   <!-- ── Overview ── -->
@@ -275,6 +281,10 @@ chmod +x lnsy-script
       <div class="cell">
         <div class="cell-label"><a href="#tools">Tools</a></div>
         <div class="cell-desc">LLM tool-calling registry. Whitelist-only execution with JSON Schema validation.</div>
+      </div>
+      <div class="cell">
+        <div class="cell-label"><a href="#library">Rust Library</a></div>
+        <div class="cell-desc">Embed the full JS runtime in any Rust project. All types and modules are public.</div>
       </div>
     </div>
   </section>
@@ -644,6 +654,69 @@ certutil -d sql:$HOME/.pki/nssdb -A -t 'C,,' \
 sudo update-ca-certificates</code></pre>
 
     <p>Restart your browser after trusting. The certificate persists across server restarts — this is a one-time step.</p>
+  </section>
+
+  <!-- ── Rust Library ── -->
+  <section id="library">
+    <h2>Rust Library</h2>
+    <p>lnsy-script also ships as a <code>lnsy_script</code> library crate. Embed the full JS runtime — including all globals, databases, ML models, and agents — into any Rust project.</p>
+
+    <h3>Add to Cargo.toml</h3>
+    <pre><code>[dependencies]
+lnsy-script = { git = <span class="str">"https://github.com/lnsy-dev/lnsy-script"</span> }</code></pre>
+
+    <h3>Embedding the JS runtime</h3>
+    <p><code>setup_context</code> registers all classes and globals on a QuickJS context:</p>
+    <pre><code><span class="kw">use</span> rquickjs::{Context, Runtime};
+<span class="kw">use</span> rquickjs::loader::{FileResolver, ScriptLoader};
+<span class="kw">use</span> lnsy_script::setup_context;
+
+<span class="kw">fn</span> <span class="fn">main</span>() {
+    <span class="kw">let</span> runtime = Runtime::new().<span class="fn">unwrap</span>();
+    runtime.<span class="fn">set_loader</span>(
+        FileResolver::default().<span class="fn">with_path</span>(<span class="str">"."</span>),
+        ScriptLoader::default(),
+    );
+    <span class="kw">let</span> context = Context::<span class="fn">full</span>(&amp;runtime).<span class="fn">unwrap</span>();
+
+    context.<span class="fn">with</span>(|ctx| {
+        <span class="fn">setup_context</span>(ctx).<span class="fn">unwrap</span>();
+    });
+
+    context.<span class="fn">with</span>(|ctx| {
+        ctx.<span class="fn">eval</span>::&lt;(), _&gt;(<span class="str">r#"
+            var db = new Database();
+            db.addItem({ name: "hello" }).then(function(id) {
+                console.log("inserted id:", id);
+            });
+        "#</span>).<span class="fn">unwrap</span>();
+    });
+
+    <span class="cmt">// drain pending promises</span>
+    <span class="kw">loop</span> {
+        <span class="kw">match</span> runtime.<span class="fn">execute_pending_job</span>() {
+            Ok(<span class="kw">true</span>) =&gt; {}
+            _ =&gt; <span class="kw">break</span>,
+        }
+    }
+}</code></pre>
+
+    <h3>Re-exported types</h3>
+    <p>All major types are available from the crate root:</p>
+    <pre><code><span class="kw">use</span> lnsy_script::{Database, VectorDatabase, GraphDatabase, KNN, TRM, StaticServer};</code></pre>
+
+    <h3>Module overview</h3>
+    <table>
+      <tr><th>Module</th><th>Key exports</th></tr>
+      <tr><td><code>lnsy_script::database</code></td><td><code>Database</code>, <code>setup_database</code></td></tr>
+      <tr><td><code>lnsy_script::vector_database</code></td><td><code>VectorDatabase</code>, <code>setup_vector_database</code></td></tr>
+      <tr><td><code>lnsy_script::graph_database</code></td><td><code>GraphDatabase</code>, <code>setup_graph_database</code></td></tr>
+      <tr><td><code>lnsy_script::knn</code></td><td><code>KNN</code>, <code>setup_knn</code></td></tr>
+      <tr><td><code>lnsy_script::trm</code></td><td><code>TRM</code>, <code>setup_trm</code></td></tr>
+      <tr><td><code>lnsy_script::agent</code></td><td><code>Agent</code>, <code>AgentHandle</code>, <code>poll_agents</code>, <code>setup_agent</code></td></tr>
+      <tr><td><code>lnsy_script::cl</code></td><td><code>js_cl_sync</code>, <code>setup_cl</code></td></tr>
+      <tr><td><code>lnsy_script::embedding_server</code></td><td><code>create_embedding_model</code>, <code>setup_embedding_server</code></td></tr>
+    </table>
   </section>
 
   <footer>lnsy-script &mdash; MIT &mdash; <a href="AGENTS.md" style="color:var(--dim);text-decoration:none;">AGENTS.md</a></footer>

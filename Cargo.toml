@@ -3,6 +3,10 @@ name = "lnsy-script"
 version = "0.1.0"
 edition = "2021"
 
+[lib]
+name = "lnsy_script"
+path = "src/lib.rs"
+
 [[bin]]
 name = "lnsy-script"
 path = "src/main.rs"

@@ -6,11 +6,117 @@ A JavaScript runtime built in Rust, embedding ML and AI capabilities directly in
 
 ## Installation
 
+**Install system-wide** (macOS and Linux):
+
+```sh
+git clone https://github.com/lnsy-dev/lnsy-script.git
+cd lnsy-script
+cargo install --path .
+```
+
+This builds a release binary and places it in `~/.cargo/bin/lnsy-script`, which is on `$PATH` for any standard Rust install. After that, `lnsy-script` is available from anywhere:
+
+```sh
+lnsy-script          # start REPL
+lnsy-script file.js  # run a script file
+```
+
+**To update** after pulling new changes:
+
+```sh
+git pull
+cargo install --path . --force
+```
+
+**Build without installing** (runs from the project directory only):
+
 ```sh
 cargo build --release
-./target/release/lnsy-script          # start REPL
-./target/release/lnsy-script file.js  # run a script file
+./target/release/lnsy-script
 ```
+
+---
+
+## Rust Library
+
+lnsy-script also ships as a `lnsy_script` library crate. Other Rust projects can embed the full JS runtime and use its types directly.
+
+**Add to `Cargo.toml`:**
+
+```toml
+[dependencies]
+lnsy-script = { git = "https://github.com/lnsy-dev/lnsy-script" }
+```
+
+### Embedding the JS runtime
+
+`setup_context` registers all classes and globals (`Database`, `KNN`, `fetch`, `cl`, etc.) on a QuickJS context:
+
+```rust
+use rquickjs::{Context, Runtime};
+use rquickjs::loader::{FileResolver, ScriptLoader};
+use lnsy_script::setup_context;
+
+fn main() {
+    let runtime = Runtime::new().unwrap();
+    runtime.set_loader(
+        FileResolver::default().with_path("."),
+        ScriptLoader::default(),
+    );
+    let context = Context::full(&runtime).unwrap();
+
+    context.with(|ctx| {
+        setup_context(ctx).unwrap();
+    });
+
+    context.with(|ctx| {
+        ctx.eval::<(), _>(r#"
+            var db = new Database();
+            db.addItem({ name: "hello" }).then(function(id) {
+                console.log("inserted id:", id);
+            });
+        "#).unwrap();
+    });
+
+    // drain pending promises
+    loop {
+        match runtime.execute_pending_job() {
+            Ok(true) => {}
+            _ => break,
+        }
+    }
+}
+```
+
+### Re-exported types
+
+All major types are re-exported from the crate root:
+
+```rust
+use lnsy_script::{Database, VectorDatabase, GraphDatabase, KNN, TRM, StaticServer};
+```
+
+Individual modules are fully public for more targeted imports:
+
+```rust
+use lnsy_script::agent::{Agent, poll_agents, get_registry};
+use lnsy_script::cl::js_cl_sync;
+use lnsy_script::embedding_server::{create_embedding_model, setup_embedding_server};
+```
+
+### Module overview
+
+| Module | Key exports |
+|--------|-------------|
+| `lnsy_script::database` | `Database`, `setup_database` |
+| `lnsy_script::vector_database` | `VectorDatabase`, `setup_vector_database` |
+| `lnsy_script::graph_database` | `GraphDatabase`, `setup_graph_database` |
+| `lnsy_script::knn` | `KNN`, `setup_knn` |
+| `lnsy_script::trm` | `TRM`, `setup_trm` |
+| `lnsy_script::agent` | `Agent`, `AgentHandle`, `poll_agents`, `setup_agent` |
+| `lnsy_script::tools` | `setup_tools` (Tools class lives in JS) |
+| `lnsy_script::cl` | `js_cl_sync`, `setup_cl` |
+| `lnsy_script::embedding_server` | `create_embedding_model`, `setup_embedding_server` |
 
 ---
 
