@@ -106,14 +106,17 @@ impl GraphDatabase {
     pub fn get_connected_nodes_sync(&self, node_id: i64) -> rquickjs::Result<String> {
         let snapshot = SnapshotId::current();
         let query = NeighborQuery { direction: BackendDirection::Outgoing, edge_type: None };
-        let neighbor_ids = self.backend.borrow().neighbors(snapshot, node_id, query)
+        // Collect all neighbor IDs with a single borrow, then release it before the node fetch loop.
+        let neighbor_ids: Vec<i64> = self.backend.borrow().neighbors(snapshot, node_id, query)
             .map_err(|e| rquickjs::Error::new_from_js_message(
                 "error", "getConnectedNodes", e.to_string()
             ))?;
-        let mut nodes = Vec::new();
+        // Hold a single borrow for all get_node calls instead of re-borrowing N times.
+        let backend = self.backend.borrow();
+        let mut nodes = Vec::with_capacity(neighbor_ids.len());
         for nid in neighbor_ids {
             let snap = SnapshotId::current();
-            if let Ok(entity) = self.backend.borrow().get_node(snap, nid) {
+            if let Ok(entity) = backend.get_node(snap, nid) {
                 nodes.push(serde_json::json!({
                     "id": entity.id,
                     "kind": entity.kind,

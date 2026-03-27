@@ -1,8 +1,11 @@
 use rquickjs::{class::Trace, Ctx, JsLifetime};
 use std::cell::RefCell;
+use std::cmp::{Ordering, Reverse};
+use std::collections::BinaryHeap;
 
 struct VectorItem {
     embedding: Vec<f32>,
+    magnitude: f32,
     metadata: serde_json::Value,
 }
 
@@ -15,14 +18,34 @@ pub struct VectorDatabase {
     file_path: Option<String>,
 }
 
-fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
-    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
-    let mag_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
-    let mag_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
-    if mag_a == 0.0 || mag_b == 0.0 {
+// Wrapper for f32 that implements Ord via total_cmp (no extra dependencies)
+#[derive(PartialEq)]
+struct OrdF32(f32);
+
+impl Eq for OrdF32 {}
+
+impl PartialOrd for OrdF32 {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        Some(self.cmp(other))
+    }
+}
+
+impl Ord for OrdF32 {
+    fn cmp(&self, other: &Self) -> Ordering {
+        self.0.total_cmp(&other.0)
+    }
+}
+
+fn compute_magnitude(v: &[f32]) -> f32 {
+    v.iter().map(|x| x * x).sum::<f32>().sqrt()
+}
+
+fn cosine_similarity(a: &[f32], a_mag: f32, b: &[f32], b_mag: f32) -> f32 {
+    if a_mag == 0.0 || b_mag == 0.0 {
         return 0.0;
     }
-    dot / (mag_a * mag_b)
+    let dot: f32 = a.iter().zip(b).map(|(x, y)| x * y).sum();
+    dot / (a_mag * b_mag)
 }
 
 fn euclidean_distance(a: &[f32], b: &[f32]) -> f32 {
@@ -50,13 +73,14 @@ fn load_from_file(path: &str) -> rquickjs::Result<Vec<VectorItem>> {
         .and_then(|v| v.as_array())
         .map(|arr| {
             arr.iter().filter_map(|item| {
-                let embedding = item.get("embedding")?
+                let embedding: Vec<f32> = item.get("embedding")?
                     .as_array()?
                     .iter()
                     .filter_map(|v| v.as_f64().map(|f| f as f32))
                     .collect();
+                let magnitude = compute_magnitude(&embedding);
                 let metadata = item.get("metadata")?.clone();
-                Some(VectorItem { embedding, metadata })
+                Some(VectorItem { embedding, magnitude, metadata })
             }).collect()
         })
         .unwrap_or_default();
@@ -88,9 +112,10 @@ impl VectorDatabase {
     #[qjs(rename = "__addItemSync")]
     pub fn add_item_sync(&self, embedding_json: String, metadata_json: String) -> rquickjs::Result<()> {
         let embedding = parse_embedding(&embedding_json)?;
+        let magnitude = compute_magnitude(&embedding);
         let metadata: serde_json::Value = serde_json::from_str(&metadata_json)
             .map_err(|e| rquickjs::Error::new_from_js_message("error", "addItem", e.to_string()))?;
-        self.items.borrow_mut().push(VectorItem { embedding, metadata });
+        self.items.borrow_mut().push(VectorItem { embedding, magnitude, metadata });
         if let Some(ref path) = self.file_path {
             save_to_file(&self.items.borrow(), path)?;
         }
@@ -100,32 +125,52 @@ impl VectorDatabase {
     #[qjs(rename = "__querySync")]
     pub fn query_sync(&self, embedding_json: String, count: usize, metric: String) -> rquickjs::Result<String> {
         let query = parse_embedding(&embedding_json)?;
+        let query_mag = compute_magnitude(&query);
         let items = self.items.borrow();
 
         let use_cosine = matches!(metric.as_str(), "cosine" | "");
         let use_euclidean = matches!(metric.as_str(), "euclidean" | "euclidian");
 
-        let mut scored: Vec<(f32, &serde_json::Value)> = items.iter().map(|item| {
-            let score = if use_cosine {
-                cosine_similarity(&query, &item.embedding)
-            } else if use_euclidean {
-                euclidean_distance(&query, &item.embedding)
-            } else {
-                manhattan_distance(&query, &item.embedding)
-            };
-            (score, &item.metadata)
-        }).collect();
-
-        // cosine: higher = better; euclidean/manhattan: lower = better
-        if use_cosine {
-            scored.sort_by(|a, b| b.0.partial_cmp(&a.0).unwrap_or(std::cmp::Ordering::Equal));
+        // Use a bounded heap for O(n log k) top-k selection instead of O(n log n) full sort.
+        // For cosine (higher=better): min-heap of size k — evict the smallest when heap exceeds k.
+        // For distance metrics (lower=better): max-heap of size k — evict the largest when heap exceeds k.
+        let results: Vec<serde_json::Value> = if use_cosine {
+            // min-heap: Reverse so BinaryHeap (max-heap) behaves as a min-heap
+            let mut heap: BinaryHeap<(Reverse<OrdF32>, usize)> = BinaryHeap::with_capacity(count + 1);
+            for (i, item) in items.iter().enumerate() {
+                let score = cosine_similarity(&query, query_mag, &item.embedding, item.magnitude);
+                heap.push((Reverse(OrdF32(score)), i));
+                if heap.len() > count {
+                    heap.pop(); // evict the smallest score
+                }
+            }
+            // Drain heap and sort descending by score
+            let mut top: Vec<(f32, usize)> = heap.into_iter().map(|(Reverse(OrdF32(s)), i)| (s, i)).collect();
+            top.sort_by(|a, b| b.0.total_cmp(&a.0));
+            top.into_iter().map(|(score, i)| {
+                serde_json::json!({ "metadata": &items[i].metadata, "score": score })
+            }).collect()
         } else {
-            scored.sort_by(|a, b| a.0.partial_cmp(&b.0).unwrap_or(std::cmp::Ordering::Equal));
-        }
-
-        let results: Vec<serde_json::Value> = scored.into_iter().take(count).map(|(score, meta)| {
-            serde_json::json!({ "metadata": meta, "score": score })
-        }).collect();
+            // max-heap for distance metrics (lower=better) — evict the largest distance
+            let mut heap: BinaryHeap<(OrdF32, usize)> = BinaryHeap::with_capacity(count + 1);
+            for (i, item) in items.iter().enumerate() {
+                let score = if use_euclidean {
+                    euclidean_distance(&query, &item.embedding)
+                } else {
+                    manhattan_distance(&query, &item.embedding)
+                };
+                heap.push((OrdF32(score), i));
+                if heap.len() > count {
+                    heap.pop(); // evict the largest distance
+                }
+            }
+            // Drain heap and sort ascending by score
+            let mut top: Vec<(f32, usize)> = heap.into_iter().map(|(OrdF32(s), i)| (s, i)).collect();
+            top.sort_by(|a, b| a.0.total_cmp(&b.0));
+            top.into_iter().map(|(score, i)| {
+                serde_json::json!({ "metadata": &items[i].metadata, "score": score })
+            }).collect()
+        };
 
         serde_json::to_string(&results)
             .map_err(|e| rquickjs::Error::new_from_js_message("error", "query", e.to_string()))

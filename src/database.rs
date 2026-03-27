@@ -33,12 +33,21 @@ impl Database {
         }).map_err(|e| rquickjs::Error::new_from_js_message("error", "Database", e.to_string()))?;
 
         rt.block_on(async {
+            // Performance PRAGMAs
+            sqlx::query("PRAGMA journal_mode=WAL").execute(&pool).await?;
+            sqlx::query("PRAGMA cache_size=-65536").execute(&pool).await?;
+            sqlx::query("PRAGMA synchronous=NORMAL").execute(&pool).await?;
+            sqlx::query("PRAGMA temp_store=MEMORY").execute(&pool).await?;
+
+            // Main records table
             sqlx::query(
                 "CREATE TABLE IF NOT EXISTS records (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     data TEXT NOT NULL
                 )"
             ).execute(&pool).await?;
+
+            // FTS5 virtual table for full-text search
             sqlx::query(
                 "CREATE VIRTUAL TABLE IF NOT EXISTS records_fts USING fts5(
                     data, content=records, content_rowid=id
@@ -48,6 +57,18 @@ impl Database {
                 "CREATE TRIGGER IF NOT EXISTS records_ai AFTER INSERT ON records BEGIN
                     INSERT INTO records_fts(rowid, data) VALUES (new.id, new.data);
                 END"
+            ).execute(&pool).await?;
+
+            // Index table for fast key-value lookups (replaces json_extract full scan)
+            sqlx::query(
+                "CREATE TABLE IF NOT EXISTS records_index (
+                    key TEXT NOT NULL,
+                    value TEXT NOT NULL,
+                    record_id INTEGER NOT NULL
+                )"
+            ).execute(&pool).await?;
+            sqlx::query(
+                "CREATE INDEX IF NOT EXISTS records_index_kv ON records_index(key, value)"
             ).execute(&pool).await
         }).map_err(|e| rquickjs::Error::new_from_js_message("error", "Database", e.to_string()))?;
 
@@ -56,14 +77,34 @@ impl Database {
 
     #[qjs(rename = "__addItemSync")]
     pub fn add_item_sync(&self, json_str: String) -> rquickjs::Result<i64> {
-        let _: serde_json::Value = serde_json::from_str(&json_str)
+        let data: serde_json::Value = serde_json::from_str(&json_str)
             .map_err(|e| rquickjs::Error::new_from_js_message("error", "addItem", e.to_string()))?;
         self.rt.block_on(async {
+            let mut tx = self.pool.begin().await?;
             let row = sqlx::query("INSERT INTO records (data) VALUES (?)")
                 .bind(&json_str)
-                .execute(&self.pool)
+                .execute(&mut *tx)
                 .await?;
-            Ok::<i64, sqlx::Error>(row.last_insert_rowid())
+            let id = row.last_insert_rowid();
+            // Populate the index for each key-value pair
+            if let Some(obj) = data.as_object() {
+                for (key, val) in obj {
+                    let val_str = match val {
+                        serde_json::Value::String(s) => s.clone(),
+                        other => other.to_string(),
+                    };
+                    sqlx::query(
+                        "INSERT INTO records_index (key, value, record_id) VALUES (?, ?, ?)"
+                    )
+                    .bind(key)
+                    .bind(&val_str)
+                    .bind(id)
+                    .execute(&mut *tx)
+                    .await?;
+                }
+            }
+            tx.commit().await?;
+            Ok::<i64, sqlx::Error>(id)
         }).map_err(|e| rquickjs::Error::new_from_js_message("error", "addItem", e.to_string()))
     }
 
@@ -71,7 +112,9 @@ impl Database {
     pub fn find_sync(&self, key: String, value: String) -> rquickjs::Result<String> {
         let results = self.rt.block_on(async {
             sqlx::query_scalar::<_, String>(
-                "SELECT data FROM records WHERE json_extract(data, '$.' || ?) = ?"
+                "SELECT r.data FROM records r
+                 JOIN records_index ri ON r.id = ri.record_id
+                 WHERE ri.key = ? AND ri.value = ?"
             )
             .bind(&key)
             .bind(&value)
