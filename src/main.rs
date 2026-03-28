@@ -1,4 +1,4 @@
-use lnsy_script::setup_context;
+use lnsy_script::{setup_context, setup_script_args};
 
 use rquickjs::{Context, Module, Runtime, Value};
 use rquickjs::loader::{FileResolver, ScriptLoader};
@@ -91,9 +91,17 @@ fn main() {
             print!("{}", include_str!("../AGENTS.md"));
             return;
         }
+        let script_args = &args[2..];
+        context.with(|ctx| {
+            setup_script_args(ctx, script_args).expect("failed to set scriptArgs");
+        });
         run_file(&runtime, &context, &args[1]);
         return;
     }
+
+    context.with(|ctx| {
+        setup_script_args(ctx, &[]).expect("failed to set scriptArgs");
+    });
 
     println!("lnsy-script 0.1.0 — type .exit or Ctrl+D to quit");
 

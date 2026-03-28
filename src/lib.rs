@@ -15,7 +15,7 @@ pub use tools::setup_tools;
 pub use trm::TRM;
 pub use vector_database::VectorDatabase;
 
-use rquickjs::{class::Trace, Class, Ctx, Function, JsLifetime, Object, Value};
+use rquickjs::{class::Trace, Array, Class, Ctx, Function, JsLifetime, Object, Value};
 use rquickjs::prelude::Rest;
 use std::sync::Arc;
 
@@ -384,6 +384,15 @@ fn run_static_server(root: String, port: u16) {
             });
         }
     });
+}
+
+pub fn setup_script_args(ctx: Ctx<'_>, args: &[String]) -> rquickjs::Result<()> {
+    let array = Array::new(ctx.clone())?;
+    for (i, arg) in args.iter().enumerate() {
+        array.set(i, arg.as_str())?;
+    }
+    ctx.globals().set("scriptArgs", array)?;
+    Ok(())
 }
 
 /// Set up a QuickJS context with all lnsy-script classes and globals registered.
