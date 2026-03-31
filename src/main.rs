@@ -60,8 +60,16 @@ fn run_file(runtime: &Runtime, context: &Context, path: &str) {
         Ok(s) => s,
         Err(e) => { eprintln!("Error reading {path}: {e}"); return; }
     };
+    // Use just the filename as the module name so that relative imports
+    // (e.g. './periodic-notes.js') resolve relative to the script's directory
+    // (which we set as CWD before calling this function) rather than against
+    // the absolute path, which breaks FileResolver's CWD-relative is_file check.
+    let module_name = std::path::Path::new(path)
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or(path);
     context.with(|ctx| {
-        match Module::evaluate(ctx.clone(), path, source.as_str()) {
+        match Module::evaluate(ctx.clone(), module_name, source.as_str()) {
             Ok(_) => {}
             Err(_) => print_js_error(&ctx),
         }
@@ -90,6 +98,13 @@ fn main() {
         if args[1] == "--agents" {
             print!("{}", include_str!("../AGENTS.md"));
             return;
+        }
+        // Change CWD to the script's directory so that relative module imports
+        // (./foo.js) resolve correctly regardless of where the script is invoked from.
+        if let Ok(abs) = std::path::Path::new(&args[1]).canonicalize() {
+            if let Some(dir) = abs.parent() {
+                let _ = std::env::set_current_dir(dir);
+            }
         }
         let script_args = &args[2..];
         context.with(|ctx| {
