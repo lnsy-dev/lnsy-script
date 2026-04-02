@@ -288,6 +288,71 @@ impl EmbeddingServer {
         Ok(format!(r#"{{"label":"{label}","score":{score:.6}}}"#))
     }
 
+    /// One-shot classification via cosine similarity of BERT embeddings.
+    ///
+    /// `labels_json`   – JSON array of label strings, e.g. `["sports","politics","tech"]`
+    /// `examples_json` – Optional JSON array of one representative text per label (same
+    ///                   order / length as labels).  When omitted the label names themselves
+    ///                   are used as the reference texts (zero-shot style).
+    ///
+    /// Returns JSON: `{"label":"sports","score":0.923456}`
+    #[qjs(rename = "__classifyOneShotSync")]
+    pub fn classify_one_shot_sync(
+        &self,
+        text: String,
+        labels_json: String,
+        examples_json: rquickjs::prelude::Opt<String>,
+    ) -> rquickjs::Result<String> {
+        let labels: Vec<String> = serde_json::from_str(&labels_json)
+            .map_err(|e| rquickjs::Error::new_from_js_message("error", "classifyOneShot parse labels", e.to_string()))?;
+        if labels.is_empty() {
+            return Err(rquickjs::Error::new_from_js_message("error", "classifyOneShot", String::from("labels array must not be empty")));
+        }
+
+        let reference_texts: Vec<String> = if let Some(ex_json) = examples_json.0 {
+            let ex: Vec<String> = serde_json::from_str(&ex_json)
+                .map_err(|e| rquickjs::Error::new_from_js_message("error", "classifyOneShot parse examples", e.to_string()))?;
+            if ex.len() != labels.len() {
+                return Err(rquickjs::Error::new_from_js_message(
+                    "error", "classifyOneShot",
+                    format!("examples length ({}) must match labels length ({})", ex.len(), labels.len()),
+                ));
+            }
+            ex
+        } else {
+            labels.clone()
+        };
+
+        let mut m = self.inner.lock().unwrap();
+
+        // Embed query + all reference texts in a single batch
+        let mut batch: Vec<String> = Vec::with_capacity(1 + reference_texts.len());
+        batch.push(text);
+        batch.extend(reference_texts.iter().cloned());
+
+        let mut vecs = m
+            .embedding
+            .embed(batch, None)
+            .map_err(|e| rquickjs::Error::new_from_js_message("error", "embed", e.to_string()))?;
+
+        let query_vec = vecs.remove(0);
+        let ref_vecs = vecs; // one per label
+
+        let best = ref_vecs
+            .iter()
+            .enumerate()
+            .map(|(i, rv)| (i, cosine_similarity(&query_vec, rv)))
+            .max_by(|a, b| a.1.partial_cmp(&b.1).unwrap_or(std::cmp::Ordering::Equal));
+
+        let (best_idx, best_score) = best.unwrap_or((0, 0.0));
+        let best_label = &labels[best_idx];
+
+        Ok(format!(r#"{{"label":{label_json},"score":{score:.6}}}"#,
+            label_json = serde_json::to_string(best_label).unwrap(),
+            score = best_score,
+        ))
+    }
+
     #[qjs(rename = "__getNamedEntitiesSync")]
     pub fn get_named_entities_sync(&self, text: String) -> rquickjs::Result<String> {
         let mut m = self.inner.lock().unwrap();
@@ -382,11 +447,25 @@ impl EmbeddingServer {
 }
 
 fn reconstruct(tokens: &[String]) -> String {
-    tokens
-        .iter()
-        .map(|t| t.trim_start_matches("##"))
-        .collect::<Vec<_>>()
-        .join("")
+    let mut result = String::new();
+    for token in tokens {
+        if token.starts_with("##") {
+            result.push_str(&token[2..]);
+        } else {
+            if !result.is_empty() {
+                result.push(' ');
+            }
+            result.push_str(token);
+        }
+    }
+    result
+}
+
+fn cosine_similarity(a: &[f32], b: &[f32]) -> f32 {
+    let dot: f32 = a.iter().zip(b.iter()).map(|(x, y)| x * y).sum();
+    let norm_a: f32 = a.iter().map(|x| x * x).sum::<f32>().sqrt();
+    let norm_b: f32 = b.iter().map(|x| x * x).sum::<f32>().sqrt();
+    if norm_a == 0.0 || norm_b == 0.0 { 0.0 } else { dot / (norm_a * norm_b) }
 }
 
 pub fn create_embedding_model() -> Result<fastembed::TextEmbedding, String> {
@@ -434,6 +513,16 @@ EmbeddingServer.prototype.getNamedEntities = function(text) {
     return new Promise(function(resolve, reject) {
         try { resolve(JSON.parse(self.__getNamedEntitiesSync(text))); }
         catch(e) { reject(e); }
+    });
+};
+EmbeddingServer.prototype.classifyOneShot = function(text, labels, examples) {
+    var self = this;
+    return new Promise(function(resolve, reject) {
+        try {
+            var labelsJson = JSON.stringify(labels);
+            var examplesJson = examples ? JSON.stringify(examples) : undefined;
+            resolve(JSON.parse(self.__classifyOneShotSync(text, labelsJson, examplesJson)));
+        } catch(e) { reject(e); }
     });
 };
 "#,
